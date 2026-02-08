@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  passwordHash  String?
+  walletAddress String?   @unique
+  nonce         String?
+  role          Role      @default(BUYER)
+  name          String?
+  avatarUrl     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  providerProfile ProviderProfile?
+  refreshTokens   RefreshToken[]
+  apiKeys         ApiKey[]
+  quotesRequested Quote[]      @relation("QuoteRequester")
+  quotesProvided  Quote[]      @relation("QuoteProvider")
+  ordersBought    Order[]      @relation("OrderBuyer")
+  ordersProvided  Order[]      @relation("OrderProvider")
+  reviews         Review[]     @relation("ReviewAuthor")
+  listings        Listing[]
+}
+
+enum Role {
+  BUYER
+  PROVIDER
+  ADMIN
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  keyHash     String    @unique
+  keyPrefix   String
+  label       String
+  permissions String[]
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model ProviderProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName       String
+  description        String?
+  websiteUrl         String?
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  stakeAmount        Decimal            @default(0) @db.Decimal(18, 6)
+  averageRating      Float?
+  totalReviews       Int                @default(0)
+  totalOrders        Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model Listing {
+  id             String   @id @default(cuid())
+  providerId     String
+  provider       User     @relation(fields: [providerId], references: [id])
+  title          String
+  slug           String   @unique
+  description    String
+  category       String
+  pricingModel   String
+  basePrice      Decimal  @db.Decimal(18, 6)
+  currency       String   @default("USDC")
+  specifications Json     @default("{}")
+  tags           String[]
+  availableSlots Int      @default(1)
+  isActive       Boolean  @default(true)
+  averageRating  Float?
+  totalReviews   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  quotes  Quote[]
+  orders  Order[]
+  reviews Review[]
+}
+
+model Quote {
+  id            String    @id @default(cuid())
+  listingId     String
+  listing       Listing   @relation(fields: [listingId], references: [id])
+  requesterId   String
+  requester     User      @relation("QuoteRequester", fields: [requesterId], references: [id])
+  providerId    String
+  provider      User      @relation("QuoteProvider", fields: [providerId], references: [id])
+  status        String    @default("PENDING")
+  requirements  Json      @default("{}")
+  message       String?
+  quotedPrice   Decimal?  @db.Decimal(18, 6)
+  estimatedDays Int?
+  providerNotes String?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders Order[]
+}
+
+model Order {
+  id           String    @id @default(cuid())
+  orderNumber  String    @unique
+  quoteId      String
+  quote        Quote     @relation(fields: [quoteId], references: [id])
+  buyerId      String
+  buyer        User      @relation("OrderBuyer", fields: [buyerId], references: [id])
+  providerId   String
+  provider     User      @relation("OrderProvider", fields: [providerId], references: [id])
+  listingId    String
+  listing      Listing   @relation(fields: [listingId], references: [id])
+  status       String    @default("PENDING")
+  amount       Decimal   @db.Decimal(18, 6)
+  escrowTxHash String?
+  escrowId     String?
+  deliverables Json?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  statusLogs   OrderStatusLog[]
+  transactions Transaction[]
+  review       Review?
+}
+
+model OrderStatusLog {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  fromStatus String?
+  toStatus   String
+  changedBy  String
+  reason     String?
+  createdAt  DateTime @default(now())
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  txHash      String   @unique
+  type        String
+  fromAddress String
+  toAddress   String
+  amount      Decimal  @db.Decimal(18, 6)
+  chainId     Int
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id])
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+}
+
+model Review {
+  id                String    @id @default(cuid())
+  orderId           String    @unique
+  order             Order     @relation(fields: [orderId], references: [id])
+  reviewerId        String
+  reviewer          User      @relation("ReviewAuthor", fields: [reviewerId], references: [id])
+  providerId        String
+  listingId         String
+  listing           Listing   @relation(fields: [listingId], references: [id])
+  rating            Int
+  comment           String?
+  providerReply     String?
+  providerRepliedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}

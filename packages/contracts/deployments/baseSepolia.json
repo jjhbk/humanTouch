@@ -1,0 +1,11 @@
+{
+  "network": "baseSepolia",
+  "chainId": 84532,
+  "deployer": "0x1a2CE739358265E48BB80bedAFBe0bcD0681DD18",
+  "deployedAt": "2026-02-08T13:22:41.222Z",
+  "contracts": {
+    "HumanLayerEscrow": "0x89597331294527266E5d99c1ddE292F440C1FAB1",
+    "HumanLayerStaking": "0x9E6eB137bC5891311C7FD064AcD54b482474450b",
+    "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+  }
+}

@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Hardhat / Solidity
+artifacts/
+cache/
+typechain-types/
+coverage/
+coverage.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+*.lcov
+.nyc_output/
+
+# Prisma
+packages/backend/prisma/*.db
+packages/backend/prisma/migrations/*.sql.bak
+
+# Misc
+*.tsbuildinfo
+*.env
+*.local

@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node", "express", "jsonwebtoken", "bcryptjs", "cors", "morgan", "cookie-parser", "uuid"],
+    "paths": {
+      "@humanlayer/shared": ["../shared/dist"],
+      "@humanlayer/shared/*": ["../shared/dist/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

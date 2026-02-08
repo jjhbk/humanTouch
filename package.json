@@ -1,0 +1,38 @@
+{
+  "name": "humanlayer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HumanLayer - AI-integrated marketplace connecting human services with AI automation",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter !@humanlayer/contracts run dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "db:generate": "pnpm --filter @humanlayer/backend exec prisma generate",
+    "db:migrate": "pnpm --filter @humanlayer/backend exec prisma migrate dev",
+    "db:push": "pnpm --filter @humanlayer/backend exec prisma db push",
+    "db:seed": "pnpm --filter @humanlayer/backend exec prisma db seed",
+    "db:studio": "pnpm --filter @humanlayer/backend exec prisma studio",
+    "contracts:compile": "pnpm --filter @humanlayer/contracts exec hardhat compile",
+    "contracts:test": "pnpm --filter @humanlayer/contracts exec hardhat test",
+    "contracts:deploy:sepolia": "pnpm --filter @humanlayer/contracts exec hardhat run scripts/deploy.ts --network baseSepolia",
+    "contracts:deploy:mainnet": "pnpm --filter @humanlayer/contracts exec hardhat run scripts/deploy.ts --network baseMainnet",
+    "clean": "pnpm -r exec rm -rf dist node_modules .next coverage artifacts cache typechain-types"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "bufferutil",
+      "utf-8-validate",
+      "keccak",
+      "secp256k1"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
