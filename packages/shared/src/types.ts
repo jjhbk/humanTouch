@@ -132,6 +132,55 @@ export interface Review {
   updatedAt: Date;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  orderId: string | null;
+  isRead: boolean;
+  createdAt: Date;
+}
+
+export type NotificationType =
+  | "ORDER_STATUS_CHANGED"
+  | "NEW_MESSAGE"
+  | "DISPUTE_OPENED"
+  | "DISPUTE_RESOLVED"
+  | "REVIEW_RECEIVED";
+
+export interface Dispute {
+  id: string;
+  orderId: string;
+  raisedBy: string;
+  reason: string;
+  description: string;
+  status: DisputeStatus;
+  resolution: string | null;
+  resolvedBy: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DisputeStatus = "OPEN" | "UNDER_REVIEW" | "RESOLVED" | "REJECTED";
+
+export interface DisputeComment {
+  id: string;
+  disputeId: string;
+  userId: string;
+  comment: string;
+  isAdmin: boolean;
+  createdAt: Date;
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+    role: string;
+  };
+}
+
 // ============================================================
 // API Types
 // ============================================================

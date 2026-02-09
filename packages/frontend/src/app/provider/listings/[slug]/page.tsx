@@ -43,7 +43,7 @@ export default function EditListingPage() {
   useEffect(() => {
     async function fetchListing() {
       try {
-        const res = await api.get<Listing>(`/api/v1/listings/${listingSlug}`);
+        const res = await api.get<Listing>(`/listings/${listingSlug}`);
         const listing = res.data;
         reset({
           title: listing.title,
@@ -95,7 +95,7 @@ export default function EditListingPage() {
         }
       }
 
-      await api.patch(`/api/v1/listings/${listingSlug}`, {
+      await api.patch(`/listings/${listingSlug}`, {
         title: data.title,
         description: data.description,
         category: data.category,

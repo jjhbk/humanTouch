@@ -167,6 +167,35 @@ export async function getMe(userId: string) {
   return safeUser;
 }
 
+export async function updateMe(userId: string, data: { walletAddress?: string; name?: string }) {
+  const updateData: Record<string, unknown> = {};
+
+  // Handle wallet address update with uniqueness check
+  if (data.walletAddress !== undefined) {
+    // Check if wallet is already used by another user
+    const existingWallet = await prisma.user.findUnique({
+      where: { walletAddress: data.walletAddress },
+    });
+
+    if (existingWallet && existingWallet.id !== userId) {
+      throw new ConflictError("This wallet address is already connected to another account");
+    }
+
+    updateData.walletAddress = data.walletAddress;
+  }
+
+  if (data.name !== undefined) updateData.name = data.name;
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: updateData,
+    include: { providerProfile: true },
+  });
+
+  const { passwordHash: _, ...safeUser } = user;
+  return safeUser;
+}
+
 export async function becomeProvider(
   userId: string,
   businessName: string,

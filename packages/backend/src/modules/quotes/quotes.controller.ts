@@ -59,8 +59,17 @@ export async function getOne(req: Request, res: Response, next: NextFunction) {
 
 export async function listMyQuotes(req: Request, res: Response, next: NextFunction) {
   try {
-    const role = (req.query.role as string) === "provider" ? "provider" : "requester";
-    const quotes = await quotesService.listForUser(req.user!.id, role as "requester" | "provider");
+    // Auto-detect role from user's actual role, but allow override via query param
+    let role: "requester" | "provider";
+    if (req.query.role === "provider" || req.query.role === "requester") {
+      role = req.query.role as "requester" | "provider";
+    } else {
+      // Default: providers see their provider quotes, everyone else sees requester quotes
+      role = req.user!.role === "PROVIDER" || req.user!.role === "ADMIN" ? "provider" : "requester";
+    }
+
+    const status = req.query.status as string | undefined;
+    const quotes = await quotesService.listForUser(req.user!.id, role, status);
     res.json({ success: true, data: quotes });
   } catch (err) {
     next(err);

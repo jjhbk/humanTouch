@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
+import { SpecificationForm } from "@/components/listings/specification-form";
 
 interface ListingForm {
   title: string;
@@ -23,7 +24,6 @@ interface ListingForm {
   category: string;
   pricingModel: string;
   basePrice: string;
-  specifications: string;
   tags: string;
   availableSlots: string;
 }
@@ -32,13 +32,16 @@ export default function NewListingPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm<ListingForm>({
+  const [specifications, setSpecifications] = useState<Record<string, any>>({});
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<ListingForm>({
     defaultValues: {
       category: "OTHER",
       pricingModel: "FIXED",
       availableSlots: "10",
     },
   });
+
+  const selectedCategory = watch("category");
 
   const categoryOptions = LISTING_CATEGORIES.map((c) => ({
     value: c,
@@ -53,24 +56,7 @@ export default function NewListingPage() {
   const onSubmit = async (data: ListingForm) => {
     setIsSubmitting(true);
     try {
-      let specifications: Record<string, unknown> = {};
-      if (data.specifications.trim()) {
-        try {
-          specifications = JSON.parse(data.specifications);
-        } catch {
-          specifications = Object.fromEntries(
-            data.specifications
-              .split("\n")
-              .filter(Boolean)
-              .map((line) => {
-                const [key, ...rest] = line.split("=");
-                return [key.trim(), rest.join("=").trim()];
-              }),
-          );
-        }
-      }
-
-      await api.post("/api/v1/listings", {
+      await api.post("/listings", {
         title: data.title,
         description: data.description,
         category: data.category,
@@ -153,11 +139,10 @@ export default function NewListingPage() {
                 {...register("availableSlots")}
               />
             </div>
-            <Textarea
-              id="specifications"
-              label="Specifications (JSON or key=value per line)"
-              placeholder={'{"turnaround": "3 days", "words": "1000"}'}
-              {...register("specifications")}
+            <SpecificationForm
+              category={selectedCategory}
+              value={specifications}
+              onChange={setSpecifications}
             />
             <Input
               id="tags"

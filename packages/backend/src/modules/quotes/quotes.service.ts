@@ -116,17 +116,74 @@ export async function withdraw(requesterId: string, quoteId: string) {
 export async function getById(quoteId: string) {
   const quote = await prisma.quote.findUnique({
     where: { id: quoteId },
-    include: { listing: true, requester: true, provider: true },
+    include: {
+      listing: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          category: true,
+          specifications: true,
+        },
+      },
+      requester: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      provider: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
   });
   if (!quote) throw new NotFoundError("Quote");
   return quote;
 }
 
-export async function listForUser(userId: string, role: "requester" | "provider") {
-  const where = role === "requester" ? { requesterId: userId } : { providerId: userId };
+export async function listForUser(
+  userId: string,
+  role: "requester" | "provider",
+  status?: string
+) {
+  const where: any = role === "requester" ? { requesterId: userId } : { providerId: userId };
+
+  // Add status filter if provided
+  if (status && status !== "all") {
+    where.status = status;
+  }
+
   return prisma.quote.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    include: { listing: true, requester: true, provider: true },
+    include: {
+      listing: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          category: true,
+        },
+      },
+      requester: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      provider: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
   });
 }

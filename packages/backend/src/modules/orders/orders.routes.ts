@@ -6,15 +6,18 @@ import { createOrderSchema, transitionOrderSchema, deliverOrderSchema } from "./
 
 const router = Router();
 
+// All routes require authentication
 router.use(authenticate);
 
 router.post("/", validate(createOrderSchema), ordersController.create);
 router.get("/", ordersController.listMyOrders);
 router.get("/:id", ordersController.getOne);
+router.get("/:id/status-logs", ordersController.getStatusLogs);
 router.post("/:id/confirm", validate(transitionOrderSchema), ordersController.confirm);
 router.post("/:id/start", validate(transitionOrderSchema), ordersController.start);
 router.post("/:id/deliver", validate(deliverOrderSchema), ordersController.deliver);
 router.post("/:id/complete", validate(transitionOrderSchema), ordersController.complete);
+router.post("/:id/release-escrow", ordersController.releaseEscrow);
 router.post("/:id/dispute", validate(transitionOrderSchema), ordersController.dispute);
 router.post("/:id/cancel", validate(transitionOrderSchema), ordersController.cancel);
 

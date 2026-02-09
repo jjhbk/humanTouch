@@ -8,7 +8,7 @@ import { Badge, getQuoteStatusVariant } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuoteResponseForm } from "@/components/quotes/quote-response-form";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatPrice } from "@/lib/utils";
 
 export default function ProviderQuotePage() {
   const params = useParams();
@@ -21,7 +21,7 @@ export default function ProviderQuotePage() {
     async function fetchQuote() {
       setIsLoading(true);
       try {
-        const res = await api.get<Quote>(`/api/v1/quotes/${quoteId}`);
+        const res = await api.get<Quote>(`/quotes/${quoteId}`);
         setQuote(res.data);
       } catch {
         // Handle error
@@ -60,17 +60,85 @@ export default function ProviderQuotePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Buyer Requirements</CardTitle>
+          <CardTitle>Buyer Information</CardTitle>
         </CardHeader>
-        <CardContent>
-          <pre className="rounded bg-gray-50 p-3 text-sm">
-            {JSON.stringify(quote.requirements, null, 2)}
-          </pre>
+        <CardContent className="space-y-4">
+          {(quote as any).requester && (
+            <div>
+              <p className="text-sm font-medium text-gray-700">Requester</p>
+              <p className="text-sm text-gray-900">
+                {(quote as any).requester.name || (quote as any).requester.email}
+              </p>
+            </div>
+          )}
+          {(quote as any).listing && (
+            <div>
+              <p className="text-sm font-medium text-gray-700">Listing</p>
+              <p className="text-sm text-gray-900">{(quote as any).listing.title}</p>
+            </div>
+          )}
           {quote.message && (
-            <p className="mt-3 text-sm text-gray-600">{quote.message}</p>
+            <div>
+              <p className="text-sm font-medium text-gray-700">Message</p>
+              <p className="text-sm text-gray-600">{quote.message}</p>
+            </div>
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Requirements</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {Object.keys(quote.requirements).length > 0 ? (
+              Object.entries(quote.requirements).map(([key, value]) => (
+                <div key={key} className="flex items-start">
+                  <span className="font-medium capitalize text-gray-700 mr-2">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}:
+                  </span>
+                  <span className="text-gray-900">
+                    {Array.isArray(value) ? value.join(", ") : String(value)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No specific requirements provided</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {quote.status === "RESPONDED" && quote.quotedPrice && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Response</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Quoted Price</p>
+                <p className="text-lg font-semibold text-primary-600">
+                  {formatPrice(quote.quotedPrice)}
+                </p>
+              </div>
+              {quote.estimatedDays && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Estimated Duration</p>
+                  <p className="text-sm text-gray-900">{quote.estimatedDays} days</p>
+                </div>
+              )}
+              {quote.providerNotes && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Your Notes</p>
+                  <p className="text-sm text-gray-600">{quote.providerNotes}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {quote.status === "PENDING" && (
         <Card>

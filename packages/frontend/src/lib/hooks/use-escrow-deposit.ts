@@ -5,18 +5,19 @@ import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
 import { CHAIN_CONFIG, USDC_DECIMALS } from "@humanlayer/shared";
 
-// Placeholder ABI - will be replaced with actual contract ABI from @humanlayer/shared
+// ABI matching HumanLayerEscrow.sol
 const ESCROW_ABI = [
   {
     name: "deposit",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "orderId", type: "bytes32" },
-      { name: "amount", type: "uint256" },
       { name: "provider", type: "address" },
+      { name: "orderId", type: "string" },
+      { name: "amount", type: "uint256" },
+      { name: "deadline", type: "uint256" },
     ],
-    outputs: [],
+    outputs: [{ name: "", type: "bytes32" }],
   },
 ] as const;
 
@@ -44,22 +45,25 @@ const ERC20_ABI = [
 ] as const;
 
 const ESCROW_CONTRACT_ADDRESS =
-  (process.env.NEXT_PUBLIC_ESCROW_CONTRACT as `0x${string}`) ??
+  (process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS as `0x${string}`) ??
   "0x0000000000000000000000000000000000000000";
 
 export function useEscrowDeposit() {
   const [isApproved, setIsApproved] = useState(false);
+  const [error, setError] = useState<string>("");
 
   const {
     writeContract: writeApprove,
     data: approveHash,
     isPending: isApproving,
+    error: approveError,
   } = useWriteContract();
 
   const {
     writeContract: writeDeposit,
     data: depositHash,
     isPending: isDepositing,
+    error: depositError,
   } = useWriteContract();
 
   const { isLoading: isWaitingApproval, isSuccess: approvalConfirmed } =
@@ -77,30 +81,56 @@ export function useEscrowDeposit() {
   }
 
   function approve(amount: string) {
+    setError("");
+
+    if (ESCROW_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+      setError("Escrow contract address not configured. Please deploy contracts first.");
+      return;
+    }
+
     const usdcAddress = CHAIN_CONFIG.baseSepolia.usdc as `0x${string}`;
-    writeApprove({
-      address: usdcAddress,
-      abi: ERC20_ABI,
-      functionName: "approve",
-      args: [
-        ESCROW_CONTRACT_ADDRESS,
-        parseUnits(amount, USDC_DECIMALS),
-      ],
-    });
+
+    try {
+      writeApprove({
+        address: usdcAddress,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [
+          ESCROW_CONTRACT_ADDRESS,
+          parseUnits(amount, USDC_DECIMALS),
+        ],
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to approve USDC");
+    }
   }
 
   function deposit(orderId: string, amount: string, provider: `0x${string}`) {
-    const orderIdBytes = `0x${orderId.replace(/-/g, "").padEnd(64, "0")}` as `0x${string}`;
-    writeDeposit({
-      address: ESCROW_CONTRACT_ADDRESS,
-      abi: ESCROW_ABI,
-      functionName: "deposit",
-      args: [
-        orderIdBytes,
-        parseUnits(amount, USDC_DECIMALS),
-        provider,
-      ],
-    });
+    setError("");
+
+    if (ESCROW_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+      setError("Escrow contract address not configured. Please deploy contracts first.");
+      return;
+    }
+
+    // Set deadline to 30 days from now
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+
+    try {
+      writeDeposit({
+        address: ESCROW_CONTRACT_ADDRESS,
+        abi: ESCROW_ABI,
+        functionName: "deposit",
+        args: [
+          provider,
+          orderId,
+          parseUnits(amount, USDC_DECIMALS),
+          deadline,
+        ],
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to deposit to escrow");
+    }
   }
 
   return {
@@ -112,5 +142,9 @@ export function useEscrowDeposit() {
     approvalConfirmed,
     depositConfirmed,
     txHash: depositHash,
+    error: error || approveError?.message || depositError?.message || "",
+    escrowAddress: ESCROW_CONTRACT_ADDRESS,
+    // Note: escrowId is returned by the contract but we need transaction receipt to get it
+    // For now, we'll use the txHash as a reference and fetch escrowId from contract events
   };
 }

@@ -26,11 +26,11 @@ export default function ListingDetailPage() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        const res = await api.get<Listing>(`/api/v1/listings/${slug}`);
+        const res = await api.get<Listing>(`/listings/${slug}`);
         setListing(res.data);
         try {
           const reviewsRes = await api.get<Review[]>(
-            `/api/v1/listings/${slug}/reviews`,
+            `/listings/${slug}/reviews`,
           );
           setReviews(reviewsRes.data);
         } catch {
@@ -185,6 +185,8 @@ export default function ListingDetailPage() {
 
       <QuoteRequestForm
         listingId={listing.id}
+        listingCategory={listing.category}
+        listingSpecifications={listing.specifications}
         open={quoteDialogOpen}
         onClose={() => setQuoteDialogOpen(false)}
       />

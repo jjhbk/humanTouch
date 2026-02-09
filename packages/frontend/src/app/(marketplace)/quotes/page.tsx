@@ -8,7 +8,6 @@ import { Badge, getQuoteStatusVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/toast";
 import { formatPrice, formatDate } from "@/lib/utils";
 
 const TABS: { label: string; value: string }[] = [
@@ -21,7 +20,6 @@ const TABS: { label: string; value: string }[] = [
 function QuotesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { toast } = useToast();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const activeTab = searchParams.get("status") ?? "all";
@@ -31,9 +29,10 @@ function QuotesContent() {
       setIsLoading(true);
       try {
         const query = activeTab !== "all" ? `?status=${activeTab}` : "";
-        const res = await api.get<Quote[]>(`/api/v1/quotes${query}`);
+        const res = await api.get<Quote[]>(`/quotes${query}`);
         setQuotes(res.data);
-      } catch {
+      } catch (error) {
+        console.error("Failed to fetch quotes:", error);
         setQuotes([]);
       } finally {
         setIsLoading(false);
@@ -41,22 +40,6 @@ function QuotesContent() {
     }
     fetchQuotes();
   }, [activeTab]);
-
-  const handleAction = async (quoteId: string, action: "accept" | "reject") => {
-    try {
-      await api.patch(`/api/v1/quotes/${quoteId}/${action}`, {});
-      toast(
-        action === "accept" ? "Quote accepted!" : "Quote rejected",
-        action === "accept" ? "success" : "info",
-      );
-      // Refresh
-      const query = activeTab !== "all" ? `?status=${activeTab}` : "";
-      const res = await api.get<Quote[]>(`/api/v1/quotes${query}`);
-      setQuotes(res.data);
-    } catch {
-      toast("Action failed", "error");
-    }
-  };
 
   return (
     <div>
@@ -92,59 +75,79 @@ function QuotesContent() {
         <p className="py-12 text-center text-gray-500">No quotes found.</p>
       ) : (
         <div className="space-y-4">
-          {quotes.map((quote) => (
-            <Card key={quote.id}>
-              <CardContent className="flex items-center justify-between p-5">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={getQuoteStatusVariant(quote.status)}>
-                      {quote.status}
-                    </Badge>
-                    <span className="text-xs text-gray-400">
-                      {formatDate(quote.createdAt)}
-                    </span>
+          {quotes.map((quote) => {
+            const quoteWithRelations = quote as any;
+            return (
+              <Card key={quote.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="flex items-center justify-between p-5">
+                  <div className="flex-1" onClick={() => router.push(`/quotes/${quote.id}`)}>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={getQuoteStatusVariant(quote.status)}>
+                        {quote.status}
+                      </Badge>
+                      <span className="text-xs text-gray-400">
+                        {formatDate(quote.createdAt)}
+                      </span>
+                    </div>
+                    {quoteWithRelations.listing && (
+                      <h3 className="mt-1 font-semibold text-gray-900">
+                        {quoteWithRelations.listing.title}
+                      </h3>
+                    )}
+                    {quoteWithRelations.provider && (
+                      <p className="mt-1 text-sm text-gray-600">
+                        Provider: {quoteWithRelations.provider.name || quoteWithRelations.provider.email}
+                      </p>
+                    )}
+                    {quote.message && (
+                      <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                        {quote.message}
+                      </p>
+                    )}
+                    {quote.quotedPrice && (
+                      <p className="mt-2 text-lg font-semibold text-primary-600">
+                        {formatPrice(quote.quotedPrice)}
+                        {quote.estimatedDays && (
+                          <span className="ml-2 text-sm font-normal text-gray-500">
+                            ({quote.estimatedDays} days)
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {quote.providerNotes && quote.status === "RESPONDED" && (
+                      <p className="mt-1 text-sm text-gray-500 line-clamp-1">
+                        Note: {quote.providerNotes}
+                      </p>
+                    )}
                   </div>
-                  {quote.message && (
-                    <p className="mt-1 text-sm text-gray-600">
-                      {quote.message}
-                    </p>
-                  )}
-                  {quote.quotedPrice && (
-                    <p className="mt-1 text-lg font-semibold text-primary-600">
-                      {formatPrice(quote.quotedPrice)}
-                      {quote.estimatedDays && (
-                        <span className="ml-2 text-sm font-normal text-gray-500">
-                          ({quote.estimatedDays} days)
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  {quote.providerNotes && (
-                    <p className="mt-1 text-sm text-gray-500">
-                      {quote.providerNotes}
-                    </p>
-                  )}
-                </div>
-                {quote.status === "RESPONDED" && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleAction(quote.id, "accept")}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAction(quote.id, "reject")}
-                    >
-                      Reject
-                    </Button>
+                  <div className="ml-4">
+                    {quote.status === "RESPONDED" ? (
+                      <Button
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/quotes/${quote.id}`);
+                        }}
+                      >
+                        Review
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/quotes/${quote.id}`);
+                        }}
+                      >
+                        View
+                      </Button>
+                    )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

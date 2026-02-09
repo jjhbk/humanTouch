@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { WalletConnectButton } from "@/components/wallet/wallet-connect-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export function Header() {
   const { isAuthenticated, user, logout } = useAuth();
@@ -30,7 +31,20 @@ export function Header() {
                 >
                   My Quotes
                 </Link>
-                {user?.role === "PROVIDER" ? (
+                <Link
+                  href="/orders"
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900"
+                >
+                  My Orders
+                </Link>
+                {user?.role === "ADMIN" ? (
+                  <Link
+                    href="/admin/disputes"
+                    className="text-sm font-medium text-red-600 hover:text-red-700"
+                  >
+                    Admin: Disputes
+                  </Link>
+                ) : user?.role === "PROVIDER" ? (
                   <Link
                     href="/provider/dashboard"
                     className="text-sm font-medium text-gray-600 hover:text-gray-900"
@@ -51,6 +65,7 @@ export function Header() {
         </div>
         <div className="flex items-center gap-4">
           <WalletConnectButton />
+          {isAuthenticated && <NotificationBell />}
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-600">

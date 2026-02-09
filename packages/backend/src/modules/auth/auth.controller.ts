@@ -88,6 +88,16 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function updateMe(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { walletAddress, name } = req.body;
+    const user = await authService.updateMe(req.user!.id, { walletAddress, name });
+    res.json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function becomeProvider(req: Request, res: Response, next: NextFunction) {
   try {
     const { businessName, description, websiteUrl } = req.body;

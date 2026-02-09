@@ -11,8 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrderTimeline } from "@/components/orders/order-timeline";
+import { OrderChat } from "@/components/messages/order-chat";
+import { DisputeForm } from "@/components/disputes/dispute-form";
+import { DisputeDetails } from "@/components/disputes/dispute-details";
+import { DisputeChat } from "@/components/disputes/dispute-chat";
 import { useToast } from "@/components/ui/toast";
 import { formatPrice, formatDate } from "@/lib/utils";
+import type { Dispute } from "@humanlayer/shared";
 
 export default function ProviderOrderPage() {
   const params = useParams();
@@ -20,6 +25,7 @@ export default function ProviderOrderPage() {
   const { toast } = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [statusLogs, setStatusLogs] = useState<OrderStatusLog[]>([]);
+  const [dispute, setDispute] = useState<Dispute | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deliverables, setDeliverables] = useState("");
 
@@ -27,15 +33,25 @@ export default function ProviderOrderPage() {
     async function fetchOrder() {
       setIsLoading(true);
       try {
-        const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+        const res = await api.get<Order>(`/orders/${orderId}`);
         setOrder(res.data);
         try {
           const logsRes = await api.get<OrderStatusLog[]>(
-            `/api/v1/orders/${orderId}/status-logs`,
+            `/orders/${orderId}/status-logs`,
           );
           setStatusLogs(logsRes.data);
         } catch {
           // May not exist yet
+        }
+
+        // Fetch dispute if exists
+        try {
+          const disputeRes = await api.get<Dispute>(`/disputes/order/${orderId}`);
+          console.log("Dispute fetched:", disputeRes.data);
+          setDispute(disputeRes.data);
+        } catch (error: any) {
+          console.log("No dispute found or error:", error.response?.status);
+          // No dispute exists (404 is expected if no dispute)
         }
       } catch {
         // Handle error
@@ -48,32 +64,39 @@ export default function ProviderOrderPage() {
 
   const handleStartWork = async () => {
     try {
-      await api.patch(`/api/v1/orders/${orderId}/start`, {});
+      await api.post(`/orders/${orderId}/start`, {});
       toast("Work started!", "success");
-      const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+      const res = await api.get<Order>(`/orders/${orderId}`);
       setOrder(res.data);
-    } catch {
+    } catch (error) {
+      console.error("Failed to start work:", error);
       toast("Failed to start work", "error");
     }
   };
 
   const handleDeliver = async () => {
+    if (!deliverables.trim()) {
+      toast("Please provide deliverables", "error");
+      return;
+    }
+
     try {
       let parsedDeliverables: Record<string, unknown> = {};
-      if (deliverables.trim()) {
-        try {
-          parsedDeliverables = JSON.parse(deliverables);
-        } catch {
-          parsedDeliverables = { notes: deliverables };
-        }
+      try {
+        parsedDeliverables = JSON.parse(deliverables);
+      } catch {
+        parsedDeliverables = { notes: deliverables };
       }
-      await api.patch(`/api/v1/orders/${orderId}/deliver`, {
+
+      await api.post(`/orders/${orderId}/deliver`, {
         deliverables: parsedDeliverables,
       });
       toast("Order delivered!", "success");
-      const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+      const res = await api.get<Order>(`/orders/${orderId}`);
       setOrder(res.data);
-    } catch {
+      setDeliverables("");
+    } catch (error) {
+      console.error("Failed to deliver order:", error);
       toast("Failed to deliver order", "error");
     }
   };
@@ -130,6 +153,51 @@ export default function ProviderOrderPage() {
           </CardContent>
         </Card>
 
+        {/* Dispute Section */}
+        {dispute ? (
+          <>
+            <DisputeDetails dispute={dispute} />
+            <DisputeChat disputeId={dispute.id} />
+          </>
+        ) : (
+          order.status !== "PENDING" &&
+          order.status !== "COMPLETED" &&
+          order.status !== "CANCELLED" &&
+          order.status !== "REFUNDED" && (
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Having Issues?
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  If you're experiencing problems with this order, you can open a
+                  dispute for review.
+                </p>
+                <DisputeForm
+                  orderId={order.id}
+                  onDisputeCreated={async () => {
+                    console.log("Dispute created, refreshing data...");
+                    try {
+                      const res = await api.get<Order>(`/orders/${orderId}`);
+                      setOrder(res.data);
+                      console.log("Order refreshed, fetching dispute...");
+                      const disputeRes = await api.get<Dispute>(
+                        `/disputes/order/${orderId}`,
+                      );
+                      console.log("Dispute data:", disputeRes.data);
+                      setDispute(disputeRes.data);
+                      toast("Dispute opened successfully", "success");
+                    } catch (error) {
+                      console.error("Error refreshing after dispute creation:", error);
+                      toast("Dispute created but UI refresh failed. Please reload page.", "error");
+                    }
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )
+        )}
+
         {order.status === "CONFIRMED" && (
           <Card>
             <CardContent className="p-6">
@@ -140,6 +208,18 @@ export default function ProviderOrderPage() {
               <Button onClick={handleStartWork}>Start Work</Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Messages */}
+        {order.status !== "PENDING" && (
+          <OrderChat
+            orderId={order.id}
+            otherPartyName={
+              (order as any).buyer?.name ||
+              (order as any).buyer?.email ||
+              "Buyer"
+            }
+          />
         )}
 
         {order.status === "IN_PROGRESS" && (

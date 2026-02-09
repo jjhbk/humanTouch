@@ -6,6 +6,7 @@ import { requestQuoteSchema, respondQuoteSchema } from "./quotes.schema.js";
 
 const router = Router();
 
+// All routes require authentication
 router.use(authenticate);
 
 router.post("/", validate(requestQuoteSchema), quotesController.requestQuote);

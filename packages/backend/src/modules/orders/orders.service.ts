@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma.js";
 import { NotFoundError, ForbiddenError, ValidationError } from "../../lib/errors.js";
 import { isValidOrderTransition, generateOrderNumber } from "@humanlayer/shared";
 import type { OrderStatus } from "@humanlayer/shared";
+import { notifyOrderStatusChange } from "../notifications/notifications.service.js";
 
 async function transition(
   userId: string,
@@ -39,6 +40,9 @@ async function transition(
       },
     }),
   ]);
+
+  // Send notifications to both parties about status change
+  await notifyOrderStatusChange(orderId, updated.buyerId, updated.providerId, fromStatus, toStatus);
 
   return updated;
 }
@@ -81,8 +85,12 @@ export async function create(buyerId: string, quoteId: string) {
   return order;
 }
 
-export async function confirm(userId: string, orderId: string, reason?: string) {
-  return transition(userId, orderId, "CONFIRMED", reason);
+export async function confirm(userId: string, orderId: string, reason?: string, escrowTxHash?: string) {
+  const extra: Record<string, unknown> = {};
+  if (escrowTxHash) {
+    extra.escrowTxHash = escrowTxHash;
+  }
+  return transition(userId, orderId, "CONFIRMED", reason, extra);
 }
 
 export async function start(userId: string, orderId: string, reason?: string) {
@@ -104,6 +112,19 @@ export async function complete(userId: string, orderId: string, reason?: string)
   if (!order) throw new NotFoundError("Order");
   if (order.buyerId !== userId) throw new ForbiddenError("Only buyer can complete");
   return transition(userId, orderId, "COMPLETED", reason);
+}
+
+export async function releaseEscrow(userId: string, orderId: string, releaseTxHash?: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+  if (order.buyerId !== userId) throw new ForbiddenError("Only buyer can release escrow");
+
+  // Can release from CONFIRMED, IN_PROGRESS, or DELIVERED status
+  if (!["CONFIRMED", "IN_PROGRESS", "DELIVERED"].includes(order.status)) {
+    throw new ValidationError("Cannot release escrow from current status");
+  }
+
+  return transition(userId, orderId, "COMPLETED", `Manual escrow release. Tx: ${releaseTxHash || "N/A"}`);
 }
 
 export async function dispute(userId: string, orderId: string, reason?: string) {
@@ -148,4 +169,16 @@ export async function listForUser(userId: string, role: "buyer" | "provider") {
     orderBy: { createdAt: "desc" },
     include: { quote: true, listing: true, buyer: true, provider: true, statusLogs: true },
   });
+}
+
+export async function getStatusLogs(orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+
+  const logs = await prisma.orderStatusLog.findMany({
+    where: { orderId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return logs;
 }

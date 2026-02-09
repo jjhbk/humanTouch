@@ -13,7 +13,8 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 export async function confirm(req: Request, res: Response, next: NextFunction) {
   try {
-    const order = await ordersService.confirm(req.user!.id, req.params.id, req.body.reason);
+    const { reason, escrowTxHash } = req.body;
+    const order = await ordersService.confirm(req.user!.id, req.params.id, reason, escrowTxHash);
     res.json({ success: true, data: order });
   } catch (err) {
     next(err);
@@ -42,6 +43,16 @@ export async function deliver(req: Request, res: Response, next: NextFunction) {
 export async function complete(req: Request, res: Response, next: NextFunction) {
   try {
     const order = await ordersService.complete(req.user!.id, req.params.id, req.body.reason);
+    res.json({ success: true, data: order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function releaseEscrow(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { releaseTxHash } = req.body;
+    const order = await ordersService.releaseEscrow(req.user!.id, req.params.id, releaseTxHash);
     res.json({ success: true, data: order });
   } catch (err) {
     next(err);
@@ -80,6 +91,15 @@ export async function listMyOrders(req: Request, res: Response, next: NextFuncti
     const role = (req.query.role as string) === "provider" ? "provider" : "buyer";
     const orders = await ordersService.listForUser(req.user!.id, role as "buyer" | "provider");
     res.json({ success: true, data: orders });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getStatusLogs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const logs = await ordersService.getStatusLogs(req.params.id);
+    res.json({ success: true, data: logs });
   } catch (err) {
     next(err);
   }

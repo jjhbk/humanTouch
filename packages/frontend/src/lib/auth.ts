@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         const res = await api.post<{ user: User; tokens: AuthTokens }>(
-          "/api/v1/auth/login",
+          "/auth/login",
           { email, password },
         );
         set({
@@ -45,7 +45,7 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (email: string, password: string, name: string) => {
         const res = await api.post<{ user: User; tokens: AuthTokens }>(
-          "/api/v1/auth/register",
+          "/auth/register",
           { email, password, name },
         );
         set({
@@ -61,8 +61,9 @@ export const useAuthStore = create<AuthState>()(
         signMessage: (message: string) => Promise<string>,
       ) => {
         // Step 1: Get SIWE nonce
-        const nonceRes = await api.get<{ nonce: string }>(
-          "/api/v1/auth/siwe/nonce",
+        const nonceRes = await api.post<{ nonce: string }>(
+          "/auth/wallet/nonce",
+          { walletAddress: address }
         );
 
         // Step 2: Create SIWE message
@@ -84,7 +85,7 @@ export const useAuthStore = create<AuthState>()(
 
         // Step 4: Verify with backend
         const res = await api.post<{ user: User; tokens: AuthTokens }>(
-          "/api/v1/auth/siwe/verify",
+          "/auth/wallet/verify",
           { message, signature },
         );
         set({
@@ -112,7 +113,7 @@ export const useAuthStore = create<AuthState>()(
         }
         try {
           const res = await api.post<{ tokens: AuthTokens }>(
-            "/api/v1/auth/refresh",
+            "/auth/refresh",
             { refreshToken },
           );
           set({

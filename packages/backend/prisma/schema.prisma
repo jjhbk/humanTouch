@@ -19,15 +19,20 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  providerProfile ProviderProfile?
-  refreshTokens   RefreshToken[]
-  apiKeys         ApiKey[]
-  quotesRequested Quote[]      @relation("QuoteRequester")
-  quotesProvided  Quote[]      @relation("QuoteProvider")
-  ordersBought    Order[]      @relation("OrderBuyer")
-  ordersProvided  Order[]      @relation("OrderProvider")
-  reviews         Review[]     @relation("ReviewAuthor")
-  listings        Listing[]
+  providerProfile   ProviderProfile?
+  refreshTokens     RefreshToken[]
+  apiKeys           ApiKey[]
+  quotesRequested   Quote[]       @relation("QuoteRequester")
+  quotesProvided    Quote[]       @relation("QuoteProvider")
+  ordersBought      Order[]       @relation("OrderBuyer")
+  ordersProvided    Order[]       @relation("OrderProvider")
+  reviews           Review[]      @relation("ReviewAuthor")
+  listings          Listing[]
+  messages          Message[]     @relation("MessageSender")
+  notifications     Notification[] @relation("UserNotifications")
+  disputesRaised    Dispute[]     @relation("DisputeRaiser")
+  disputesResolved  Dispute[]     @relation("DisputeResolver")
+  disputeComments   DisputeComment[] @relation("DisputeCommentAuthor")
 }
 
 enum Role {
@@ -149,6 +154,8 @@ model Order {
   statusLogs   OrderStatusLog[]
   transactions Transaction[]
   review       Review?
+  messages     Message[]
+  dispute      Dispute?
 }
 
 model OrderStatusLog {
@@ -191,4 +198,68 @@ model Review {
   providerRepliedAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  content   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId, createdAt])
+  @@index([senderId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // ORDER_STATUS_CHANGED, NEW_MESSAGE, DISPUTE_OPENED, etc.
+  title     String
+  message   String
+  orderId   String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model Dispute {
+  id          String    @id @default(cuid())
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  raisedBy    String
+  raiser      User      @relation("DisputeRaiser", fields: [raisedBy], references: [id])
+  reason      String
+  description String    @db.Text
+  status      String    @default("OPEN") // OPEN, UNDER_REVIEW, RESOLVED, REJECTED
+  resolution  String?   @db.Text
+  resolvedBy  String?
+  resolver    User?     @relation("DisputeResolver", fields: [resolvedBy], references: [id])
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  comments DisputeComment[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model DisputeComment {
+  id         String   @id @default(cuid())
+  disputeId  String
+  dispute    Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("DisputeCommentAuthor", fields: [userId], references: [id])
+  comment    String   @db.Text
+  isAdmin    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([disputeId, createdAt])
 }

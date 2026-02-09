@@ -30,7 +30,7 @@ export function QuoteResponseForm({
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      await api.patch(`/api/v1/quotes/${quoteId}/respond`, {
+      await api.post(`/quotes/${quoteId}/respond`, {
         quotedPrice: data.quotedPrice,
         estimatedDays: parseInt(data.estimatedDays, 10),
         providerNotes: data.providerNotes || null,

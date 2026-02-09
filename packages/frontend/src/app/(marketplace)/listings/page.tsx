@@ -39,7 +39,7 @@ function ListingsContent() {
         if (v !== undefined) params.set(k, String(v));
       });
 
-      const res = await api.get<Listing[]>(`/api/v1/listings?${params.toString()}`);
+      const res = await api.get<Listing[]>(`/listings?${params.toString()}`);
       setListings(res.data);
       setMeta(res.meta ?? null);
     } catch {

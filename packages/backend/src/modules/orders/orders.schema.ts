@@ -6,6 +6,8 @@ export const createOrderSchema = z.object({
 
 export const transitionOrderSchema = z.object({
   reason: z.string().max(1000).optional(),
+  escrowTxHash: z.string().optional(),
+  escrowId: z.string().optional(),
 });
 
 export const deliverOrderSchema = z.object({

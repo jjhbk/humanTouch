@@ -12,8 +12,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { EscrowDeposit } from "@/components/orders/escrow-deposit";
+import { OrderChat } from "@/components/messages/order-chat";
+import { DisputeForm } from "@/components/disputes/dispute-form";
+import { DisputeDetails } from "@/components/disputes/dispute-details";
+import { DisputeChat } from "@/components/disputes/dispute-chat";
+import { ReleaseEscrowButton } from "@/components/orders/release-escrow-button";
 import { useToast } from "@/components/ui/toast";
 import { formatPrice, formatDate } from "@/lib/utils";
+import type { Dispute } from "@humanlayer/shared";
 
 export default function BuyerOrderPage() {
   const params = useParams();
@@ -21,6 +27,7 @@ export default function BuyerOrderPage() {
   const { toast } = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [statusLogs, setStatusLogs] = useState<OrderStatusLog[]>([]);
+  const [dispute, setDispute] = useState<Dispute | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -29,15 +36,25 @@ export default function BuyerOrderPage() {
     async function fetchOrder() {
       setIsLoading(true);
       try {
-        const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+        const res = await api.get<Order>(`/orders/${orderId}`);
         setOrder(res.data);
         try {
           const logsRes = await api.get<OrderStatusLog[]>(
-            `/api/v1/orders/${orderId}/status-logs`,
+            `/orders/${orderId}/status-logs`,
           );
           setStatusLogs(logsRes.data);
         } catch {
           // May not exist yet
+        }
+
+        // Fetch dispute if exists
+        try {
+          const disputeRes = await api.get<Dispute>(`/disputes/order/${orderId}`);
+          console.log("Dispute fetched:", disputeRes.data);
+          setDispute(disputeRes.data);
+        } catch (error: any) {
+          console.log("No dispute found or error:", error.response?.status);
+          // No dispute exists (404 is expected if no dispute)
         }
       } catch {
         // Handle error
@@ -50,18 +67,19 @@ export default function BuyerOrderPage() {
 
   const handleComplete = async () => {
     try {
-      await api.patch(`/api/v1/orders/${orderId}/complete`, {});
+      await api.post(`/orders/${orderId}/complete`, {});
       toast("Order marked as complete!", "success");
-      const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+      const res = await api.get<Order>(`/orders/${orderId}`);
       setOrder(res.data);
-    } catch {
+    } catch (error) {
+      console.error("Failed to complete order:", error);
       toast("Failed to complete order", "error");
     }
   };
 
   const handleReview = async () => {
     try {
-      await api.post("/api/v1/reviews", {
+      await api.post("/reviews", {
         orderId,
         rating: reviewRating,
         comment: reviewComment || null,
@@ -133,11 +151,107 @@ export default function BuyerOrderPage() {
         </Card>
 
         {order.status === "PENDING" && (
-          <EscrowDeposit
-            orderId={order.id}
-            amount={order.amount}
-            providerAddress={"0x0000000000000000000000000000000000000000"}
-          />
+          <>
+            {!(order as any).provider?.walletAddress ? (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="p-6">
+                  <h3 className="font-semibold text-yellow-900 mb-2">
+                    Provider Wallet Not Connected
+                  </h3>
+                  <p className="text-sm text-yellow-800">
+                    The provider needs to connect their wallet address before you can deposit to escrow.
+                    Please wait for the provider to update their account with a wallet address.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <EscrowDeposit
+                orderId={order.id}
+                amount={order.amount}
+                providerAddress={(order as any).provider.walletAddress as `0x${string}`}
+                onDepositConfirmed={async () => {
+                  // Refresh order data
+                  const res = await api.get<Order>(`/orders/${orderId}`);
+                  setOrder(res.data);
+                }}
+              />
+            )}
+          </>
+        )}
+
+        {/* Release Escrow or Dispute - Show for active orders */}
+        {!dispute &&
+         order.status !== "PENDING" &&
+         order.status !== "COMPLETED" &&
+         order.status !== "CANCELLED" &&
+         order.status !== "REFUNDED" && (
+          <Card className="border-2 border-primary-200">
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Order Actions
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Release payment to provider or open a dispute if there are issues
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <ReleaseEscrowButton
+                  orderId={order.id}
+                  escrowId={order.escrowId || null}
+                  onReleased={async () => {
+                    const res = await api.get<Order>(`/orders/${orderId}`);
+                    setOrder(res.data);
+                  }}
+                />
+                <DisputeForm
+                  orderId={order.id}
+                  onDisputeCreated={async () => {
+                    console.log("Dispute created, refreshing data...");
+                    try {
+                      const res = await api.get<Order>(`/orders/${orderId}`);
+                      setOrder(res.data);
+                      console.log("Order refreshed, fetching dispute...");
+                      const disputeRes = await api.get<Dispute>(
+                        `/disputes/order/${orderId}`,
+                      );
+                      console.log("Dispute data:", disputeRes.data);
+                      setDispute(disputeRes.data);
+                      toast("Dispute opened successfully", "success");
+                    } catch (error) {
+                      console.error("Error refreshing after dispute creation:", error);
+                      toast("Dispute created but UI refresh failed. Please reload page.", "error");
+                    }
+                  }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dispute Details and Chat */}
+        {dispute ? (
+          <>
+            <DisputeDetails dispute={dispute} />
+            <DisputeChat disputeId={dispute.id} />
+          </>
+        ) : (
+          order.status === "DISPUTED" && (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardContent className="p-6">
+                <p className="text-sm text-yellow-800">
+                  This order has a dispute, but details couldn't be loaded. Please refresh the page.
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh Page
+                </Button>
+              </CardContent>
+            </Card>
+          )
         )}
 
         {order.status === "DELIVERED" && (
@@ -150,6 +264,18 @@ export default function BuyerOrderPage() {
               <Button onClick={handleComplete}>Mark as Complete</Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Messages */}
+        {order.status !== "PENDING" && (
+          <OrderChat
+            orderId={order.id}
+            otherPartyName={
+              (order as any).provider?.name ||
+              (order as any).provider?.email ||
+              "Provider"
+            }
+          />
         )}
 
         {order.status === "COMPLETED" && (

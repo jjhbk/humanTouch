@@ -6,6 +6,7 @@ import { confirmDepositSchema } from "./payments.schema.js";
 
 const router = Router();
 
+// All routes require authentication
 router.use(authenticate);
 
 router.get("/:orderId/escrow", paymentsController.getEscrowInfo);

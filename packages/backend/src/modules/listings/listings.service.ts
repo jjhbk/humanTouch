@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { NotFoundError, ForbiddenError } from "../../lib/errors.js";
-import { slugify, clampPagination } from "@humanlayer/shared";
+import { NotFoundError, ForbiddenError, ValidationError } from "../../lib/errors.js";
+import { slugify, clampPagination, validateSpecifications } from "@humanlayer/shared";
 import type { ListingSearchQuery } from "@humanlayer/shared";
 
 export async function create(providerId: string, data: {
@@ -15,6 +15,14 @@ export async function create(providerId: string, data: {
   tags?: string[];
   availableSlots?: number;
 }) {
+  // Validate specifications against category template
+  if (data.specifications && Object.keys(data.specifications).length > 0) {
+    const validation = validateSpecifications(data.category, data.specifications);
+    if (!validation.valid) {
+      throw new ValidationError(`Specification validation failed: ${validation.errors.join(", ")}`);
+    }
+  }
+
   let slug = slugify(data.title);
 
   const existingSlug = await prisma.listing.findUnique({ where: { slug } });
@@ -46,6 +54,15 @@ export async function update(providerId: string, listingId: string, data: Record
   const listing = await prisma.listing.findUnique({ where: { id: listingId } });
   if (!listing) throw new NotFoundError("Listing");
   if (listing.providerId !== providerId) throw new ForbiddenError("Not your listing");
+
+  // Validate specifications if provided
+  if (data.specifications && typeof data.specifications === 'object') {
+    const category = (data.category as string) || listing.category;
+    const validation = validateSpecifications(category, data.specifications as Record<string, any>);
+    if (!validation.valid) {
+      throw new ValidationError(`Specification validation failed: ${validation.errors.join(", ")}`);
+    }
+  }
 
   const updateData: Record<string, unknown> = { ...data };
   if (data.basePrice) {
