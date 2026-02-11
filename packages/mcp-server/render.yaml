@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: humanlayer-mcp-server
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd ../shared && pnpm install && pnpm run build && cd ../mcp-server && pnpm install && pnpm run build
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HUMANLAYER_API_URL
+        value: https://humantouch.onrender.com/api/v1/api/v1
+      - key: PORT
+        generateValue: true

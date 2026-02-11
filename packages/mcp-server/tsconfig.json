@@ -3,10 +3,11 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
     "types": ["node"],
-    "paths": {}
+    "paths": {
+      "@humanlayer/shared": ["../shared/dist"],
+      "@humanlayer/shared/*": ["../shared/dist/*"]
+    }
   },
   "include": ["src/**/*"]
 }
