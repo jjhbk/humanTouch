@@ -11,6 +11,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: HUMANLAYER_API_URL
-        value: https://humantouch.onrender.com/api/v1/api/v1
+        value: https://humantouch.onrender.com/api/v1
       - key: PORT
         generateValue: true

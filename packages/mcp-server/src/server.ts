@@ -6,6 +6,7 @@ import { registerCreateOrder } from "./tools/create-order.js";
 import { registerGetOrderStatus } from "./tools/get-order-status.js";
 import { registerSubmitReview } from "./tools/submit-review.js";
 
+// Create default server instance for stdio mode
 const server = new McpServer({
   name: "humanlayer",
   version: "0.1.0",

@@ -1,55 +1,102 @@
 #!/usr/bin/env node
 
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { server } from "./server.js";
-import express from "express";
-import cors from "cors";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createServer } from "http";
+import { randomUUID } from "crypto";
 
-const app = express();
+// Import the tool registration
+import { registerSearchListings } from "./tools/search-listings.js";
+import { registerGetListingDetails } from "./tools/get-listing-details.js";
+import { registerRequestQuote } from "./tools/request-quote.js";
+import { registerCreateOrder } from "./tools/create-order.js";
+import { registerGetOrderStatus } from "./tools/get-order-status.js";
+import { registerSubmitReview } from "./tools/submit-review.js";
+
 const PORT = process.env.PORT || 3002;
 
-// Enable CORS for all origins (AI agents can connect from anywhere)
-app.use(cors());
-app.use(express.json());
-
-// Health check endpoint for Render
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "humanlayer-mcp-server" });
+// Create a single MCP server instance
+const server = new McpServer({
+  name: "humanlayer-mcp-server",
+  version: "0.1.0",
 });
 
-// SSE endpoint for MCP protocol
-app.get("/sse", async (req, res) => {
-  console.log("New MCP client connection via SSE");
+// Register all tools once
+registerSearchListings(server);
+registerGetListingDetails(server);
+registerRequestQuote(server);
+registerCreateOrder(server);
+registerGetOrderStatus(server);
+registerSubmitReview(server);
 
-  const transport = new SSEServerTransport("/message", res);
-  await server.connect(transport);
-
-  // Keep connection alive
-  req.on("close", () => {
-    console.log("Client disconnected");
-  });
+// Create transport with session support
+const transport = new StreamableHTTPServerTransport({
+  sessionIdGenerator: () => {
+    return randomUUID();
+  }
 });
 
-// POST endpoint for MCP messages
-app.post("/message", async (req, res) => {
-  // SSE transport handles this internally
-  res.status(200).end();
+// Connect server to transport
+await server.connect(transport);
+
+// Create HTTP server using raw Node.js
+const httpServer = createServer((req, res) => {
+  // Enable CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url!, `http://${req.headers.host}`);
+
+  // Health check endpoint
+  if (url.pathname === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", service: "humanlayer-mcp-server" }));
+    return;
+  }
+
+  // Root info endpoint
+  if (url.pathname === "/") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      name: "HumanLayer MCP Server",
+      version: "0.1.0",
+      description: "Model Context Protocol server for HumanLayer marketplace",
+      transport: "StreamableHTTP",
+      mcp_endpoint: "/mcp",
+      health_check: "/health",
+    }));
+    return;
+  }
+
+  // MCP endpoint - delegate to transport
+  if (url.pathname.startsWith("/mcp")) {
+    console.log(`MCP request: ${req.method} ${url.pathname}`);
+    try {
+      transport.handleRequest(req, res);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Internal server error" }));
+      }
+    }
+    return;
+  }
+
+  // 404 for other routes
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not found" }));
 });
 
-// Root endpoint with info
-app.get("/", (_req, res) => {
-  res.json({
-    name: "HumanLayer MCP Server",
-    version: "0.1.0",
-    description: "Model Context Protocol server for HumanLayer marketplace",
-    mcp_endpoint: "/sse",
-    health_check: "/health",
-    documentation: "https://github.com/yourusername/humanlayer",
-  });
-});
-
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`HumanLayer MCP server listening on port ${PORT}`);
-  console.log(`SSE endpoint: http://localhost:${PORT}/sse`);
+  console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
