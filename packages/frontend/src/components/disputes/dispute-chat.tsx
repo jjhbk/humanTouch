@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { useVisibilityPolling } from "@/lib/hooks/use-visibility-polling";
 import { formatDate } from "@/lib/utils";
 
 interface DisputeComment {
@@ -36,7 +37,6 @@ export function DisputeChat({ disputeId }: DisputeChatProps) {
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const commentsEndRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
 
   const scrollToBottom = () => {
     commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,6 +46,7 @@ export function DisputeChat({ disputeId }: DisputeChatProps) {
     try {
       const res = await api.get<DisputeComment[]>(`/disputes/${disputeId}/comments`);
       setComments(res.data);
+      scrollToBottom();
     } catch (error) {
       console.error("Failed to fetch comments:", error);
     } finally {
@@ -53,23 +54,7 @@ export function DisputeChat({ disputeId }: DisputeChatProps) {
     }
   };
 
-  useEffect(() => {
-    fetchComments();
-
-    // Poll for new comments every 20 seconds (reduced for scalability)
-    // Disputes are less time-critical than regular messages
-    pollIntervalRef.current = setInterval(fetchComments, 20000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [disputeId]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [comments]);
+  useVisibilityPolling(fetchComments, 20000);
 
   const handleSend = async () => {
     if (!newComment.trim() || isSending) return;

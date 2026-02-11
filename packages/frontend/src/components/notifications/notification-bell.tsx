@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/hooks/use-auth";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { useVisibilityPolling } from "@/lib/hooks/use-visibility-polling";
 import type { Notification } from "@humanlayer/shared";
 
 export function NotificationBell() {
@@ -15,11 +16,10 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
 
   const fetchUnreadCount = async () => {
+    if (!user) return;
     try {
-      // Use combined activity endpoint for better performance
       const res = await api.get<{
         unreadNotifications: number;
         unreadMessages: number;
@@ -43,20 +43,7 @@ export function NotificationBell() {
     }
   };
 
-  useEffect(() => {
-    if (!user) return;
-
-    fetchUnreadCount();
-
-    // Poll for new notifications every 60 seconds (reduced from 30s)
-    pollIntervalRef.current = setInterval(fetchUnreadCount, 60000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [user]);
+  useVisibilityPolling(fetchUnreadCount, 60000);
 
   useEffect(() => {
     if (isOpen && notifications.length === 0) {

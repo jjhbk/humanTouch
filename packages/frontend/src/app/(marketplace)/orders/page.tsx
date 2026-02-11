@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -23,7 +23,7 @@ const STATUS_TABS = [
 
 export default function BuyerOrdersPage() {
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("");
 
@@ -32,22 +32,21 @@ export default function BuyerOrdersPage() {
       setIsLoading(true);
       try {
         const res = await api.get<Order[]>("/orders?role=buyer");
-        let filtered = res.data;
-
-        if (activeTab) {
-          filtered = filtered.filter((order) => order.status === activeTab);
-        }
-
-        setOrders(filtered);
+        setAllOrders(res.data);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
-        setOrders([]);
+        setAllOrders([]);
       } finally {
         setIsLoading(false);
       }
     }
     fetchOrders();
-  }, [activeTab]);
+  }, []);
+
+  const orders = useMemo(() => {
+    if (!activeTab) return allOrders;
+    return allOrders.filter((o) => o.status === activeTab);
+  }, [allOrders, activeTab]);
 
   return (
     <div className="space-y-6">

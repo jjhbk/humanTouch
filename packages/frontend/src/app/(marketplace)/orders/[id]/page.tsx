@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import type { Order, OrderStatusLog } from "@humanlayer/shared";
 import { ORDER_STATUS_LABELS } from "@humanlayer/shared";
@@ -63,6 +63,11 @@ export default function BuyerOrderPage() {
       }
     }
     fetchOrder();
+  }, [orderId]);
+
+  const refreshOrder = useCallback(async () => {
+    const res = await api.get<Order>(`/orders/${orderId}`);
+    setOrder(res.data);
   }, [orderId]);
 
   const handleComplete = async () => {
@@ -169,11 +174,7 @@ export default function BuyerOrderPage() {
                 orderId={order.id}
                 amount={order.amount}
                 providerAddress={(order as any).provider.walletAddress as `0x${string}`}
-                onDepositConfirmed={async () => {
-                  // Refresh order data
-                  const res = await api.get<Order>(`/orders/${orderId}`);
-                  setOrder(res.data);
-                }}
+                onDepositConfirmed={refreshOrder}
               />
             )}
           </>
@@ -199,23 +200,16 @@ export default function BuyerOrderPage() {
                 <ReleaseEscrowButton
                   orderId={order.id}
                   escrowId={order.escrowId || null}
-                  onReleased={async () => {
-                    const res = await api.get<Order>(`/orders/${orderId}`);
-                    setOrder(res.data);
-                  }}
+                  onReleased={refreshOrder}
                 />
                 <DisputeForm
                   orderId={order.id}
                   onDisputeCreated={async () => {
-                    console.log("Dispute created, refreshing data...");
                     try {
-                      const res = await api.get<Order>(`/orders/${orderId}`);
-                      setOrder(res.data);
-                      console.log("Order refreshed, fetching dispute...");
+                      await refreshOrder();
                       const disputeRes = await api.get<Dispute>(
                         `/disputes/order/${orderId}`,
                       );
-                      console.log("Dispute data:", disputeRes.data);
                       setDispute(disputeRes.data);
                       toast("Dispute opened successfully", "success");
                     } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAccount } from "wagmi";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { parseEventLogs } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,11 @@ export function EscrowDeposit({
   } = useEscrowDeposit();
 
   // Update backend when deposit is confirmed
+  const hasConfirmedRef = useRef(false);
   useEffect(() => {
     async function updateOrderWithEscrow() {
-      if (depositConfirmed && txHash && depositReceipt) {
+      if (depositConfirmed && txHash && depositReceipt && !hasConfirmedRef.current) {
+        hasConfirmedRef.current = true;
         try {
           let escrowId: string | null = null;
 
@@ -106,7 +108,7 @@ export function EscrowDeposit({
       }
     }
     updateOrderWithEscrow();
-  }, [depositConfirmed, txHash, depositReceipt, orderId, toast, onDepositConfirmed]);
+  }, [depositConfirmed, txHash, depositReceipt, orderId]);
 
   if (!isConnected) {
     return (

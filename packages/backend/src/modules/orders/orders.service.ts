@@ -146,7 +146,7 @@ export async function releaseEscrow(userId: string, orderId: string, releaseTxHa
     throw new ValidationError("Cannot release escrow from current status");
   }
 
-  return transition(userId, orderId, "COMPLETED", `Manual escrow release. Tx: ${releaseTxHash || "N/A"}`);
+  return transition(userId, orderId, "COMPLETED", `Manual escrow release. Tx: ${releaseTxHash || "N/A"}`, releaseTxHash ? { releaseTxHash } : undefined);
 }
 
 export async function dispute(userId: string, orderId: string, reason?: string) {

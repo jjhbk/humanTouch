@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { useVisibilityPolling } from "@/lib/hooks/use-visibility-polling";
 import { formatDate } from "@/lib/utils";
 
 interface Message {
@@ -36,7 +37,7 @@ export function OrderChat({ orderId, otherPartyName }: OrderChatProps) {
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout>();
+  const lastMarkedRef = useRef<Set<string>>(new Set());
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -50,14 +51,17 @@ export function OrderChat({ orderId, otherPartyName }: OrderChatProps) {
         unreadCount: number;
       }>(`/messages/order/${orderId}`);
       setMessages(res.data.messages);
+      scrollToBottom();
 
-      // Mark unread messages as read
-      const unreadIds = res.data.messages
+      // Only mark as read for new unreads not already marked
+      const newUnreadIds = res.data.messages
         .filter((m) => !m.isRead && m.senderId !== user?.id)
-        .map((m) => m.id);
+        .map((m) => m.id)
+        .filter((id) => !lastMarkedRef.current.has(id));
 
-      if (unreadIds.length > 0) {
-        await api.post("/messages/mark-read", { messageIds: unreadIds });
+      if (newUnreadIds.length > 0) {
+        await api.post("/messages/mark-read", { messageIds: newUnreadIds });
+        newUnreadIds.forEach((id) => lastMarkedRef.current.add(id));
       }
     } catch (error) {
       console.error("Failed to fetch messages:", error);
@@ -66,23 +70,7 @@ export function OrderChat({ orderId, otherPartyName }: OrderChatProps) {
     }
   };
 
-  useEffect(() => {
-    fetchMessages();
-
-    // Poll for new messages every 15 seconds (reduced from 5s for scalability)
-    // For real-time feel with better performance
-    pollIntervalRef.current = setInterval(fetchMessages, 15000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [orderId]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useVisibilityPolling(fetchMessages, 15000);
 
   const handleSend = async () => {
     if (!newMessage.trim() || isSending) return;

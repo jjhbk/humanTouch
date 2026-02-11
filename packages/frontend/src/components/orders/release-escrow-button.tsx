@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
@@ -49,8 +49,10 @@ export function ReleaseEscrowButton({
   }, [writeError, toast]);
 
   // Update backend when release is confirmed
+  const hasReleasedRef = useRef(false);
   useEffect(() => {
-    if (releaseConfirmed && txHash) {
+    if (releaseConfirmed && txHash && !hasReleasedRef.current) {
+      hasReleasedRef.current = true;
       api
         .post(`/orders/${orderId}/release-escrow`, {
           releaseTxHash: txHash,
@@ -65,7 +67,7 @@ export function ReleaseEscrowButton({
           toast("Release successful but failed to update order", "error");
         });
     }
-  }, [releaseConfirmed, txHash, orderId, toast, onReleased]);
+  }, [releaseConfirmed, txHash, orderId]);
 
   const handleRelease = async () => {
     if (!isConnected) {

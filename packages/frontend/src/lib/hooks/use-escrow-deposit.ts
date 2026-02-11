@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
 import { CHAIN_CONFIG, USDC_DECIMALS } from "@humanlayer/shared";
@@ -76,9 +76,11 @@ export function useEscrowDeposit() {
       hash: depositHash,
     });
 
-  if (approvalConfirmed && !isApproved) {
-    setIsApproved(true);
-  }
+  useEffect(() => {
+    if (approvalConfirmed && !isApproved) {
+      setIsApproved(true);
+    }
+  }, [approvalConfirmed, isApproved]);
 
   function approve(amount: string) {
     setError("");
