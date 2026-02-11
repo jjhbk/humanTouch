@@ -9,5 +9,6 @@
       "@humanlayer/shared/*": ["../shared/dist/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["src/scripts/**/*"]
 }

@@ -62,16 +62,28 @@ export default function AdminDisputeDetailPage() {
   const [isResolving, setIsResolving] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
+  const [refundTxHash, setRefundTxHash] = useState<string | null>(null);
 
   const {
-    writeContract,
-    data: txHash,
+    writeContract: writeRelease,
+    data: releaseTxHashData,
     isPending: isReleasingEscrow,
+  } = useWriteContract();
+
+  const {
+    writeContract: writeRefund,
+    data: refundTxHashData,
+    isPending: isRefundingEscrow,
   } = useWriteContract();
 
   const { isLoading: isWaitingRelease, isSuccess: releaseConfirmed } =
     useWaitForTransactionReceipt({
-      hash: txHash,
+      hash: releaseTxHashData,
+    });
+
+  const { isLoading: isWaitingRefund, isSuccess: refundConfirmed } =
+    useWaitForTransactionReceipt({
+      hash: refundTxHashData,
     });
 
   useEffect(() => {
@@ -92,11 +104,19 @@ export default function AdminDisputeDetailPage() {
 
   // Update releaseTxHash when blockchain transaction confirms
   useEffect(() => {
-    if (releaseConfirmed && txHash) {
-      setReleaseTxHash(txHash);
-      toast("Escrow released successfully!", "success");
+    if (releaseConfirmed && releaseTxHashData) {
+      setReleaseTxHash(releaseTxHashData);
+      toast("Escrow released to provider successfully!", "success");
     }
-  }, [releaseConfirmed, txHash, toast]);
+  }, [releaseConfirmed, releaseTxHashData, toast]);
+
+  // Update refundTxHash when blockchain refund confirms
+  useEffect(() => {
+    if (refundConfirmed && refundTxHashData) {
+      setRefundTxHash(refundTxHashData);
+      toast("Escrow refunded to buyer successfully!", "success");
+    }
+  }, [refundConfirmed, refundTxHashData, toast]);
 
   const handleUpdateStatus = async (status: string) => {
     setIsUpdatingStatus(true);
@@ -137,7 +157,7 @@ export default function AdminDisputeDetailPage() {
     }
 
     try {
-      writeContract({
+      writeRelease({
         address: ESCROW_CONTRACT_ADDRESS,
         abi: HumanLayerEscrowABI,
         functionName: "release",
@@ -146,6 +166,42 @@ export default function AdminDisputeDetailPage() {
     } catch (error: any) {
       console.error("Failed to release escrow:", error);
       toast(error.message || "Failed to release escrow", "error");
+    }
+  };
+
+  const handleRefundEscrow = () => {
+    if (!isConnected) {
+      toast("Please connect your wallet first", "error");
+      return;
+    }
+
+    if (!dispute?.order.escrowId) {
+      toast("No escrow ID found for this order", "error");
+      return;
+    }
+
+    const escrowId = dispute.order.escrowId;
+
+    if (!escrowId.startsWith('0x') || escrowId.length !== 66) {
+      toast("Invalid escrow ID format", "error");
+      return;
+    }
+
+    if (ESCROW_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+      toast("Escrow contract not configured", "error");
+      return;
+    }
+
+    try {
+      writeRefund({
+        address: ESCROW_CONTRACT_ADDRESS,
+        abi: HumanLayerEscrowABI,
+        functionName: "refund",
+        args: [escrowId as `0x${string}`],
+      });
+    } catch (error: any) {
+      console.error("Failed to refund escrow:", error);
+      toast(error.message || "Failed to refund escrow", "error");
     }
   };
 
@@ -161,12 +217,18 @@ export default function AdminDisputeDetailPage() {
       return;
     }
 
+    // If REFUNDED status but no escrow refund tx, warn user
+    if (newOrderStatus === "REFUNDED" && dispute?.order.escrowId && !refundTxHash) {
+      toast("Please refund escrow payment first before resolving as REFUNDED", "error");
+      return;
+    }
+
     setIsResolving(true);
     try {
       await api.post(`/disputes/${disputeId}/resolve`, {
         resolution,
         newOrderStatus,
-        releaseTxHash: releaseTxHash || undefined,
+        releaseTxHash: releaseTxHash || refundTxHash || undefined,
       });
       toast("Dispute resolved successfully", "success");
       router.push("/admin/disputes");
@@ -356,7 +418,7 @@ export default function AdminDisputeDetailPage() {
             {newOrderStatus === "COMPLETED" && dispute?.order.escrowId && (
               <div className="bg-blue-50 border border-blue-200 rounded-md p-4 space-y-3">
                 <p className="text-sm font-medium text-blue-900">
-                  Step 1: Release Escrow Payment
+                  Step 1: Release Escrow Payment to Provider
                 </p>
                 <p className="text-xs text-blue-700">
                   Before marking as COMPLETED, you must release the escrowed funds to the provider via blockchain transaction.
@@ -369,7 +431,7 @@ export default function AdminDisputeDetailPage() {
                 ) : releaseTxHash ? (
                   <div className="bg-green-50 border border-green-200 rounded p-3">
                     <p className="text-xs font-medium text-green-800 mb-1">
-                      ✓ Escrow Released
+                      ✓ Escrow Released to Provider
                     </p>
                     <p className="text-xs text-green-700 font-mono break-all">
                       Tx: {releaseTxHash}
@@ -384,6 +446,43 @@ export default function AdminDisputeDetailPage() {
                     {isReleasingEscrow || isWaitingRelease
                       ? "Releasing Escrow..."
                       : "Release Escrow to Provider"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Show escrow refund section if REFUNDED and escrowId exists */}
+            {newOrderStatus === "REFUNDED" && dispute?.order.escrowId && (
+              <div className="bg-orange-50 border border-orange-200 rounded-md p-4 space-y-3">
+                <p className="text-sm font-medium text-orange-900">
+                  Step 1: Refund Escrow Payment to Buyer
+                </p>
+                <p className="text-xs text-orange-700">
+                  Before marking as REFUNDED, you must refund the escrowed funds to the buyer via blockchain transaction. Only the contract owner can call this function.
+                </p>
+                {!isConnected ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-orange-700">Connect your wallet to refund escrow:</p>
+                    <ConnectButton />
+                  </div>
+                ) : refundTxHash ? (
+                  <div className="bg-green-50 border border-green-200 rounded p-3">
+                    <p className="text-xs font-medium text-green-800 mb-1">
+                      ✓ Escrow Refunded to Buyer
+                    </p>
+                    <p className="text-xs text-green-700 font-mono break-all">
+                      Tx: {refundTxHash}
+                    </p>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleRefundEscrow}
+                    disabled={isRefundingEscrow || isWaitingRefund}
+                    className="w-full bg-orange-600 hover:bg-orange-700"
+                  >
+                    {isRefundingEscrow || isWaitingRefund
+                      ? "Refunding Escrow..."
+                      : "Refund Escrow to Buyer"}
                   </Button>
                 )}
               </div>
