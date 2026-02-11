@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm run build:shared && pnpm run build",
+  "buildCommand": "cd ../shared && pnpm install && pnpm run build && cd ../mcp-server && pnpm install && tsc && tsc-alias",
   "installCommand": "pnpm install --no-frozen-lockfile",
   "builds": [
     {

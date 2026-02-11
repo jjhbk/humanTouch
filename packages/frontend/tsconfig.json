@@ -17,8 +17,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@humanlayer/shared": ["../shared/src"],
-      "@humanlayer/shared/*": ["../shared/src/*"]
+      "@humanlayer/shared": ["../shared/dist"],
+      "@humanlayer/shared/*": ["../shared/dist/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

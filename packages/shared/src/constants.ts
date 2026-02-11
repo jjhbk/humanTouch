@@ -1,4 +1,4 @@
-import type { OrderStatus, QuoteStatus } from "./types";
+import type { OrderStatus, QuoteStatus } from "./types.js";
 
 // ============================================================
 // Order State Machine

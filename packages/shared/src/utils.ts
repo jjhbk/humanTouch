@@ -1,4 +1,4 @@
-import { USDC_DECIMALS } from "./constants";
+import { USDC_DECIMALS } from "./constants.js";
 
 /**
  * Generate a URL-safe slug from a title
