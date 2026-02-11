@@ -6,6 +6,34 @@ export async function createDispute(req: Request, res: Response, next: NextFunct
     const { orderId, reason, description } = req.body;
     const raisedBy = req.user!.id;
 
+    console.log("Create dispute request:", { orderId, reason, description, raisedBy });
+
+    // Basic validation
+    if (!orderId || !reason || !description) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Missing required fields",
+          details: {
+            orderId: !orderId ? "Order ID is required" : undefined,
+            reason: !reason ? "Reason is required" : undefined,
+            description: !description ? "Description is required" : undefined,
+          }
+        }
+      });
+    }
+
+    if (description.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Description must be at least 10 characters"
+        }
+      });
+    }
+
     const dispute = await disputesService.createDispute(orderId, raisedBy, reason, description);
 
     res.status(201).json({ success: true, data: dispute });
@@ -57,10 +85,10 @@ export async function getAllDisputes(req: Request, res: Response, next: NextFunc
 export async function resolveDispute(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { resolution, newOrderStatus } = req.body;
+    const { resolution, newOrderStatus, releaseTxHash } = req.body;
     const resolvedBy = req.user!.id;
 
-    const dispute = await disputesService.resolveDispute(id, resolvedBy, resolution, newOrderStatus);
+    const dispute = await disputesService.resolveDispute(id, resolvedBy, resolution, newOrderStatus, releaseTxHash);
 
     res.json({ success: true, data: dispute });
   } catch (error) {

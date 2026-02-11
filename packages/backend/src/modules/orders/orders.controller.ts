@@ -13,8 +13,8 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 export async function confirm(req: Request, res: Response, next: NextFunction) {
   try {
-    const { reason, escrowTxHash } = req.body;
-    const order = await ordersService.confirm(req.user!.id, req.params.id, reason, escrowTxHash);
+    const { reason, escrowTxHash, escrowId } = req.body;
+    const order = await ordersService.confirm(req.user!.id, req.params.id, reason, escrowTxHash, escrowId);
     res.json({ success: true, data: order });
   } catch (err) {
     next(err);

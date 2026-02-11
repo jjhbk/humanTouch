@@ -1,50 +1,96 @@
-export const MockUSDCABI = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function totalSupply() view returns (uint256)",
-  "function balanceOf(address) view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
-  "function mint(address to, uint256 amount)",
-] as const;
+import HumanLayerEscrowABIJson from "./HumanLayerEscrow.abi.json";
 
-export const HumanLayerEscrowABI = [
-  "function usdcToken() view returns (address)",
-  "function platformFeeBps() view returns (uint256)",
-  "function paused() view returns (bool)",
-  "function deposit(address provider, string orderId, uint256 amount, uint256 deadline) returns (bytes32)",
-  "function release(bytes32 escrowId)",
-  "function refund(bytes32 escrowId)",
-  "function dispute(bytes32 escrowId)",
-  "function setPlatformFee(uint256 newFeeBps)",
-  "function pause()",
-  "function unpause()",
-  "function getEscrow(bytes32 escrowId) view returns (tuple(address buyer, address provider, uint256 amount, uint256 platformFee, uint256 deadline, uint8 status))",
-  "function owner() view returns (address)",
-  "event EscrowCreated(bytes32 indexed escrowId, address indexed buyer, address indexed provider, uint256 amount, string orderId)",
-  "event EscrowReleased(bytes32 indexed escrowId, address indexed provider, uint256 amount, uint256 fee)",
-  "event EscrowRefunded(bytes32 indexed escrowId, address indexed buyer, uint256 amount)",
-  "event EscrowDisputed(bytes32 indexed escrowId, address indexed buyer)",
+// Export the compiled ABI from contract artifacts
+export const HumanLayerEscrowABI = HumanLayerEscrowABIJson;
+
+export const MockUSDCABI = [
+  {
+    "inputs": [],
+    "name": "name",
+    "outputs": [{ "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "symbol",
+    "outputs": [{ "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "decimals",
+    "outputs": [{ "type": "uint8" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "name": "spender", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "name": "approve",
+    "outputs": [{ "type": "bool" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "name": "to", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "name": "mint",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
 ] as const;
 
 export const HumanLayerStakingABI = [
-  "function usdcToken() view returns (address)",
-  "function minimumStake() view returns (uint256)",
-  "function cooldownPeriod() view returns (uint256)",
-  "function stake(uint256 amount)",
-  "function requestUnstake()",
-  "function withdraw()",
-  "function slash(address provider, uint256 amount)",
-  "function setMinimumStake(uint256 newMinimum)",
-  "function setCooldownPeriod(uint256 newPeriod)",
-  "function getStake(address provider) view returns (tuple(uint256 amount, uint256 unstakeRequestedAt, bool active))",
-  "function isActiveProvider(address provider) view returns (bool)",
-  "function owner() view returns (address)",
-  "event Staked(address indexed provider, uint256 amount)",
-  "event UnstakeRequested(address indexed provider, uint256 timestamp)",
-  "event Withdrawn(address indexed provider, uint256 amount)",
-  "event Slashed(address indexed provider, uint256 amount)",
+  {
+    "inputs": [],
+    "name": "usdcToken",
+    "outputs": [{ "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minimumStake",
+    "outputs": [{ "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "name": "amount", "type": "uint256" }],
+    "name": "stake",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "requestUnstake",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "name": "provider", "type": "address" },
+      { "name": "amount", "type": "uint256" }
+    ],
+    "name": "slash",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
 ] as const;

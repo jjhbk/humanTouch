@@ -2,6 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useEffect } from "react";
+import { parseEventLogs } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { useEscrowDeposit } from "@/lib/hooks/use-escrow-deposit";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
+import { HumanLayerEscrowABI } from "@humanlayer/shared";
 
 interface EscrowDepositProps {
   orderId: string;
@@ -33,6 +35,7 @@ export function EscrowDeposit({
     isApproved,
     depositConfirmed,
     txHash,
+    depositReceipt,
     error,
     escrowAddress,
   } = useEscrowDeposit();
@@ -40,11 +43,54 @@ export function EscrowDeposit({
   // Update backend when deposit is confirmed
   useEffect(() => {
     async function updateOrderWithEscrow() {
-      if (depositConfirmed && txHash) {
+      if (depositConfirmed && txHash && depositReceipt) {
         try {
-          // Generate escrowId from orderId (simple approach)
-          // In production, you'd read this from contract events
-          const escrowId = `0x${orderId.split('').map(c => c.charCodeAt(0).toString(16)).join('').padEnd(64, '0')}`;
+          let escrowId: string | null = null;
+
+          // Try to parse EscrowCreated event from transaction receipt
+          try {
+            const logs = parseEventLogs({
+              abi: HumanLayerEscrowABI,
+              logs: depositReceipt.logs,
+              eventName: "EscrowCreated",
+            });
+
+            if (logs.length > 0) {
+              escrowId = logs[0].args.escrowId as string;
+              console.log("Extracted escrowId from parseEventLogs:", escrowId);
+            }
+          } catch (parseError) {
+            console.warn("Event parsing failed, trying manual extraction...", parseError);
+          }
+
+          // Fallback: Manually extract escrowId from logs
+          if (!escrowId) {
+            const escrowCreatedSignature = "0xecfc64e6b5d00db90b689255403357841334dfc94584137e88c526dc65cbb713";
+            const escrowLog = depositReceipt.logs.find(
+              (log) => log.topics[0]?.toLowerCase() === escrowCreatedSignature.toLowerCase()
+            );
+
+            if (escrowLog && escrowLog.topics[1]) {
+              escrowId = escrowLog.topics[1];
+              console.log("Manually extracted escrowId from topics:", escrowId);
+            }
+          }
+
+          if (!escrowId) {
+            console.error("No EscrowCreated event found in transaction");
+            toast("Deposit successful but escrowId not found. Using txHash as reference.", "warning");
+
+            // Fallback to txHash
+            await api.post(`/orders/${orderId}/confirm`, {
+              escrowTxHash: txHash,
+              escrowId: txHash,
+              reason: "Escrow deposited (escrowId unavailable)",
+            });
+            onDepositConfirmed?.();
+            return;
+          }
+
+          console.log("Final escrowId to save:", escrowId);
 
           await api.post(`/orders/${orderId}/confirm`, {
             escrowTxHash: txHash,
@@ -60,7 +106,7 @@ export function EscrowDeposit({
       }
     }
     updateOrderWithEscrow();
-  }, [depositConfirmed, txHash, orderId, toast, onDepositConfirmed]);
+  }, [depositConfirmed, txHash, depositReceipt, orderId, toast, onDepositConfirmed]);
 
   if (!isConnected) {
     return (

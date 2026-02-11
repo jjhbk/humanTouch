@@ -85,11 +85,33 @@ export async function create(buyerId: string, quoteId: string) {
   return order;
 }
 
-export async function confirm(userId: string, orderId: string, reason?: string, escrowTxHash?: string) {
-  const extra: Record<string, unknown> = {};
-  if (escrowTxHash) {
-    extra.escrowTxHash = escrowTxHash;
+export async function confirm(userId: string, orderId: string, reason?: string, escrowTxHash?: string, escrowId?: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+
+  // If already confirmed, just update escrow details without state transition
+  if (order.status === "CONFIRMED") {
+    const updateData: Record<string, unknown> = {};
+    if (escrowTxHash && !order.escrowTxHash) updateData.escrowTxHash = escrowTxHash;
+    if (escrowId && !order.escrowId) updateData.escrowId = escrowId;
+
+    // Only update if there's new data
+    if (Object.keys(updateData).length > 0) {
+      return prisma.order.update({
+        where: { id: orderId },
+        data: updateData,
+      });
+    }
+
+    // No updates needed, return existing order
+    return order;
   }
+
+  // Normal transition for non-confirmed orders
+  const extra: Record<string, unknown> = {};
+  if (escrowTxHash) extra.escrowTxHash = escrowTxHash;
+  if (escrowId) extra.escrowId = escrowId;
+
   return transition(userId, orderId, "CONFIRMED", reason, extra);
 }
 

@@ -158,6 +158,7 @@ export async function resolveDispute(
   resolvedBy: string,
   resolution: string,
   newOrderStatus: "COMPLETED" | "REFUNDED" | "CANCELLED",
+  releaseTxHash?: string,
 ) {
   const dispute = await prisma.dispute.findUnique({
     where: { id: disputeId },
@@ -183,10 +184,14 @@ export async function resolveDispute(
     },
   });
 
-  // Update order status
+  // Update order status and optionally add release transaction hash
   await prisma.order.update({
     where: { id: dispute.orderId },
-    data: { status: newOrderStatus },
+    data: {
+      status: newOrderStatus,
+      // If COMPLETED and releaseTxHash provided, update it
+      ...(newOrderStatus === "COMPLETED" && releaseTxHash ? { releaseTxHash } : {}),
+    },
   });
 
   // Create status log
@@ -196,24 +201,30 @@ export async function resolveDispute(
       fromStatus: "DISPUTED",
       toStatus: newOrderStatus,
       changedBy: resolvedBy,
-      reason: `Dispute resolved: ${resolution}`,
+      reason: `Dispute resolved: ${resolution}${releaseTxHash ? ` (Escrow release tx: ${releaseTxHash})` : ""}`,
     },
   });
 
   // Notify both parties
+  const resolutionMessage = newOrderStatus === "COMPLETED"
+    ? "Payment has been released to the provider."
+    : newOrderStatus === "REFUNDED"
+    ? "Payment has been refunded to the buyer."
+    : "The order has been cancelled.";
+
   await Promise.all([
     createNotification(
       dispute.order.buyerId,
       "DISPUTE_RESOLVED",
       "Dispute Resolved",
-      `The dispute has been resolved. New order status: ${newOrderStatus}`,
+      `The dispute has been resolved. ${resolutionMessage}`,
       dispute.orderId,
     ),
     createNotification(
       dispute.order.providerId,
       "DISPUTE_RESOLVED",
       "Dispute Resolved",
-      `The dispute has been resolved. New order status: ${newOrderStatus}`,
+      `The dispute has been resolved. ${resolutionMessage}`,
       dispute.orderId,
     ),
   ]);

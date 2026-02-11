@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +14,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatPrice } from "@/lib/utils";
 import { DisputeChat } from "@/components/disputes/dispute-chat";
+import { HumanLayerEscrowABI } from "@humanlayer/shared";
 import type { Dispute } from "@humanlayer/shared";
+
+const ESCROW_CONTRACT_ADDRESS =
+  (process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS as `0x${string}`) ??
+  "0x0000000000000000000000000000000000000000";
 
 const DISPUTE_STATUS_VARIANTS: Record<
   string,
@@ -30,6 +37,8 @@ interface DisputeWithDetails extends Dispute {
     orderNumber: string;
     amount: string;
     status: string;
+    escrowId: string | null;
+    escrowTxHash: string | null;
     buyer: { id: string; name: string | null; email: string };
     provider: { id: string; name: string | null; email: string };
   };
@@ -42,6 +51,7 @@ export default function AdminDisputeDetailPage() {
   const router = useRouter();
   const disputeId = params.id as string;
   const { toast } = useToast();
+  const { isConnected } = useAccount();
 
   const [dispute, setDispute] = useState<DisputeWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +61,18 @@ export default function AdminDisputeDetailPage() {
   );
   const [isResolving, setIsResolving] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
+
+  const {
+    writeContract,
+    data: txHash,
+    isPending: isReleasingEscrow,
+  } = useWriteContract();
+
+  const { isLoading: isWaitingRelease, isSuccess: releaseConfirmed } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    });
 
   useEffect(() => {
     async function fetchDispute() {
@@ -68,6 +90,14 @@ export default function AdminDisputeDetailPage() {
     fetchDispute();
   }, [disputeId, toast]);
 
+  // Update releaseTxHash when blockchain transaction confirms
+  useEffect(() => {
+    if (releaseConfirmed && txHash) {
+      setReleaseTxHash(txHash);
+      toast("Escrow released successfully!", "success");
+    }
+  }, [releaseConfirmed, txHash, toast]);
+
   const handleUpdateStatus = async (status: string) => {
     setIsUpdatingStatus(true);
     try {
@@ -83,9 +113,51 @@ export default function AdminDisputeDetailPage() {
     }
   };
 
+  const handleReleaseEscrow = () => {
+    if (!isConnected) {
+      toast("Please connect your wallet first", "error");
+      return;
+    }
+
+    if (!dispute?.order.escrowId) {
+      toast("No escrow ID found for this order", "error");
+      return;
+    }
+
+    const escrowId = dispute.order.escrowId;
+
+    if (!escrowId.startsWith('0x') || escrowId.length !== 66) {
+      toast("Invalid escrow ID format", "error");
+      return;
+    }
+
+    if (ESCROW_CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+      toast("Escrow contract not configured", "error");
+      return;
+    }
+
+    try {
+      writeContract({
+        address: ESCROW_CONTRACT_ADDRESS,
+        abi: HumanLayerEscrowABI,
+        functionName: "release",
+        args: [escrowId as `0x${string}`],
+      });
+    } catch (error: any) {
+      console.error("Failed to release escrow:", error);
+      toast(error.message || "Failed to release escrow", "error");
+    }
+  };
+
   const handleResolve = async () => {
     if (!resolution.trim()) {
       toast("Please provide a resolution description", "error");
+      return;
+    }
+
+    // If COMPLETED status but no escrow release tx, warn user
+    if (newOrderStatus === "COMPLETED" && dispute?.order.escrowId && !releaseTxHash) {
+      toast("Please release escrow payment first before resolving as COMPLETED", "error");
       return;
     }
 
@@ -94,6 +166,7 @@ export default function AdminDisputeDetailPage() {
       await api.post(`/disputes/${disputeId}/resolve`, {
         resolution,
         newOrderStatus,
+        releaseTxHash: releaseTxHash || undefined,
       });
       toast("Dispute resolved successfully", "success");
       router.push("/admin/disputes");
@@ -278,6 +351,51 @@ export default function AdminDisputeDetailPage() {
               onChange={(e) => setResolution(e.target.value)}
               rows={6}
             />
+
+            {/* Show escrow release section if COMPLETED and escrowId exists */}
+            {newOrderStatus === "COMPLETED" && dispute?.order.escrowId && (
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4 space-y-3">
+                <p className="text-sm font-medium text-blue-900">
+                  Step 1: Release Escrow Payment
+                </p>
+                <p className="text-xs text-blue-700">
+                  Before marking as COMPLETED, you must release the escrowed funds to the provider via blockchain transaction.
+                </p>
+                {!isConnected ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-blue-700">Connect your wallet to release escrow:</p>
+                    <ConnectButton />
+                  </div>
+                ) : releaseTxHash ? (
+                  <div className="bg-green-50 border border-green-200 rounded p-3">
+                    <p className="text-xs font-medium text-green-800 mb-1">
+                      ✓ Escrow Released
+                    </p>
+                    <p className="text-xs text-green-700 font-mono break-all">
+                      Tx: {releaseTxHash}
+                    </p>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleReleaseEscrow}
+                    disabled={isReleasingEscrow || isWaitingRelease}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isReleasingEscrow || isWaitingRelease
+                      ? "Releasing Escrow..."
+                      : "Release Escrow to Provider"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {newOrderStatus === "COMPLETED" && !dispute?.order.escrowId && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                <p className="text-xs text-yellow-800">
+                  ⚠️ No escrow ID found. The order will be marked as COMPLETED without releasing funds through the smart contract.
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-2 justify-end">
               <Button

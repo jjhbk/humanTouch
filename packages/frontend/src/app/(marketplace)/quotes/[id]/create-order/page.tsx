@@ -48,6 +48,9 @@ export default function CreateOrderPage() {
   const handleCreateOrder = async () => {
     if (!quote) return;
 
+    // Prevent double-click
+    if (isCreating) return;
+
     setIsCreating(true);
     try {
       console.log("Creating order with quoteId:", quote.id);
@@ -58,19 +61,18 @@ export default function CreateOrderPage() {
 
       console.log("Order created successfully:", res.data);
 
-      toast("Order created successfully!", "success");
+      toast("Order created successfully! Redirecting...", "success");
 
-      // Redirect to the order page - res.data is already the order object
+      // Redirect immediately - res.data is already the order object
       const orderId = (res.data as any).id;
-      setTimeout(() => {
-        router.push(`/orders/${orderId}`);
-      }, 1000);
+      router.push(`/orders/${orderId}`);
+
+      // Keep button disabled during redirect (don't set isCreating to false)
     } catch (error: any) {
       console.error("Failed to create order:", error);
       const errorMessage = error?.message || "Failed to create order";
       toast(errorMessage, "error");
-    } finally {
-      setIsCreating(false);
+      setIsCreating(false); // Only re-enable on error
     }
   };
 
@@ -199,7 +201,7 @@ export default function CreateOrderPage() {
           disabled={isCreating}
           size="lg"
         >
-          {isCreating ? "Creating Order..." : "Create Order"}
+          {isCreating ? "Depositing Funds..." : "Deposit Funds"}
         </Button>
       </div>
     </div>

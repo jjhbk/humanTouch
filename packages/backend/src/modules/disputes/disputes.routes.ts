@@ -14,8 +14,8 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Create dispute (buyer or provider)
-router.post("/", validate(createDisputeSchema), disputesController.createDispute);
+// Create dispute (buyer or provider) - validation handled in controller
+router.post("/", disputesController.createDispute);
 
 // Get dispute by ID
 router.get("/:id", disputesController.getDispute);

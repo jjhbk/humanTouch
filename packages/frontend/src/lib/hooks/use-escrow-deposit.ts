@@ -71,7 +71,7 @@ export function useEscrowDeposit() {
       hash: approveHash,
     });
 
-  const { isLoading: isWaitingDeposit, isSuccess: depositConfirmed } =
+  const { isLoading: isWaitingDeposit, isSuccess: depositConfirmed, data: depositReceipt } =
     useWaitForTransactionReceipt({
       hash: depositHash,
     });
@@ -142,9 +142,8 @@ export function useEscrowDeposit() {
     approvalConfirmed,
     depositConfirmed,
     txHash: depositHash,
+    depositReceipt,
     error: error || approveError?.message || depositError?.message || "",
     escrowAddress: ESCROW_CONTRACT_ADDRESS,
-    // Note: escrowId is returned by the contract but we need transaction receipt to get it
-    // For now, we'll use the txHash as a reference and fetch escrowId from contract events
   };
 }
