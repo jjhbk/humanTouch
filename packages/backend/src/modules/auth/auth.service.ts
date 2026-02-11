@@ -210,7 +210,7 @@ export async function becomeProvider(
   if (!user) throw new NotFoundError("User");
   if (user.providerProfile) throw new ConflictError("User is already a provider");
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: any) => {
     await tx.user.update({
       where: { id: userId },
       data: { role: "PROVIDER" },

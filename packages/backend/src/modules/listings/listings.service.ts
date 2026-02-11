@@ -38,9 +38,9 @@ export async function create(providerId: string, data: {
       description: data.description,
       category: data.category,
       pricingModel: data.pricingModel,
-      basePrice: new Prisma.Decimal(data.basePrice),
+      basePrice: new (Prisma as any).Decimal(data.basePrice),
       currency: data.currency ?? "USDC",
-      specifications: (data.specifications ?? {}) as Prisma.InputJsonValue,
+      specifications: (data.specifications ?? {}) as any,
       tags: data.tags ?? [],
       availableSlots: data.availableSlots ?? 1,
     },
@@ -66,7 +66,7 @@ export async function update(providerId: string, listingId: string, data: Record
 
   const updateData: Record<string, unknown> = { ...data };
   if (data.basePrice) {
-    updateData.basePrice = new Prisma.Decimal(data.basePrice as string);
+    updateData.basePrice = new (Prisma as any).Decimal(data.basePrice as string);
   }
   if (data.title) {
     let slug = slugify(data.title as string);
@@ -114,13 +114,13 @@ export async function getByIdOrSlug(idOrSlug: string) {
 export async function search(query: ListingSearchQuery) {
   const { page, limit, skip } = clampPagination(query.page, query.limit);
 
-  const where: Prisma.ListingWhereInput = { isActive: true };
+  const where: any = { isActive: true };
 
   if (query.category) where.category = query.category;
   if (query.minPrice !== undefined || query.maxPrice !== undefined) {
     where.basePrice = {};
-    if (query.minPrice !== undefined) where.basePrice.gte = new Prisma.Decimal(query.minPrice);
-    if (query.maxPrice !== undefined) where.basePrice.lte = new Prisma.Decimal(query.maxPrice);
+    if (query.minPrice !== undefined) where.basePrice.gte = new (Prisma as any).Decimal(query.minPrice);
+    if (query.maxPrice !== undefined) where.basePrice.lte = new (Prisma as any).Decimal(query.maxPrice);
   }
   if (query.tags && query.tags.length > 0) {
     where.tags = { hasSome: query.tags };
@@ -135,7 +135,7 @@ export async function search(query: ListingSearchQuery) {
     ];
   }
 
-  let orderBy: Prisma.ListingOrderByWithRelationInput = { createdAt: "desc" };
+  let orderBy: any = { createdAt: "desc" };
   switch (query.sortBy) {
     case "price_asc":
       orderBy = { basePrice: "asc" };

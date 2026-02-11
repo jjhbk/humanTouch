@@ -86,7 +86,7 @@ export async function getDashboardStats(userId: string) {
       totalRevenue,
       pendingQuotes,
     },
-    recentOrders: recentOrders.map((order) => ({
+    recentOrders: recentOrders.map((order: any) => ({
       id: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
@@ -204,11 +204,11 @@ export async function getAnalytics(userId: string, days: number = 30) {
     orders: {
       total: orders.length,
       byStatus: {
-        completed: orders.filter((o) => o.status === "COMPLETED").length,
-        inProgress: orders.filter((o) =>
+        completed: orders.filter((o: any) => o.status === "COMPLETED").length,
+        inProgress: orders.filter((o: any) =>
           ["CONFIRMED", "IN_PROGRESS", "DELIVERED"].includes(o.status)
         ).length,
-        cancelled: orders.filter((o) =>
+        cancelled: orders.filter((o: any) =>
           ["CANCELLED", "REFUNDED"].includes(o.status)
         ).length,
       },
@@ -218,7 +218,7 @@ export async function getAnalytics(userId: string, days: number = 30) {
       accepted: quotesAccepted,
       conversionRate: `${conversionRate}%`,
     },
-    topListings: topListings.map((listing) => ({
+    topListings: topListings.map((listing: any) => ({
       id: listing.id,
       title: listing.title,
       orderCount: listing._count.orders,
@@ -257,7 +257,7 @@ export async function getProviderOrders(
   ]);
 
   return {
-    orders: orders.map((order) => ({
+    orders: orders.map((order: any) => ({
       id: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
@@ -338,7 +338,7 @@ export async function getPublicProfile(userId: string) {
       totalReviews: user.providerProfile.totalReviews,
       totalOrders: user.providerProfile.totalOrders,
     },
-    listings: user.listings.map((listing) => ({
+    listings: user.listings.map((listing: any) => ({
       id: listing.id,
       title: listing.title,
       slug: listing.slug,

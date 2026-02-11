@@ -19,7 +19,7 @@ export async function requestQuote(
       listingId,
       requesterId,
       providerId: listing.providerId,
-      requirements: requirements as Prisma.InputJsonValue,
+      requirements: requirements as any,
       message,
     },
     include: { listing: true, requester: true, provider: true },
@@ -48,7 +48,7 @@ export async function respond(
     where: { id: quoteId },
     data: {
       status: "RESPONDED",
-      quotedPrice: new Prisma.Decimal(quotedPrice),
+      quotedPrice: new (Prisma as any).Decimal(quotedPrice),
       estimatedDays,
       providerNotes,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
