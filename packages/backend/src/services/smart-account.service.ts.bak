@@ -1,0 +1,470 @@
+import { createSmartAccountClient } from "@biconomy/account";
+import type { BiconomySmartAccountV2 } from "@biconomy/account";
+import { createPublicClient, http, type Hex, encodeFunctionData } from "viem";
+import { baseSepolia, base } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
+import { prisma } from "../lib/prisma.js";
+import { keyManagementService } from "./key-management.service.js";
+import type { SessionPermission } from "../types/account-abstraction.js";
+import { HumanLayerEscrowABI, parseUSDC } from "@humanlayer/shared";
+
+const chain = process.env.BASE_CHAIN_ID === "8453" ? base : baseSepolia;
+
+const ESCROW_CONTRACT_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS as Hex;
+const USDC_ADDRESS = process.env.USDC_ADDRESS as Hex;
+
+/**
+ * SmartAccountService
+ * Handles creation and management of Biconomy smart accounts for AA
+ */
+export class SmartAccountService {
+  private bundlerUrl: string;
+  private paymasterUrl?: string;
+
+  constructor() {
+    this.bundlerUrl = process.env.BICONOMY_BUNDLER_URL!;
+    this.paymasterUrl = process.env.BICONOMY_PAYMASTER_URL;
+
+    if (!this.bundlerUrl) {
+      throw new Error("BICONOMY_BUNDLER_URL is required");
+    }
+  }
+
+  /**
+   * Create a smart account for a user
+   * @param userId User ID
+   * @param apiKeyId API Key ID (for session key association)
+   * @returns Smart account address and session key details
+   */
+  async createSmartAccount(userId: string, apiKeyId: string) {
+    // Check if user already has a smart account
+    const existing = await prisma.smartAccount.findUnique({
+      where: { userId },
+      include: { sessionKeys: true },
+    });
+
+    if (existing) {
+      // Check if this API key already has a session key
+      const existingSessionKey = existing.sessionKeys.find(
+        (sk) => sk.apiKeyId === apiKeyId
+      );
+
+      if (existingSessionKey) {
+        return {
+          smartAccountAddress: existing.address,
+          sessionKey: {
+            publicKey: existingSessionKey.publicKey,
+            expiresAt: existingSessionKey.expiresAt,
+          },
+        };
+      }
+
+      // Create a new session key for this API key
+      return this.createSessionKey(existing.id, apiKeyId);
+    }
+
+    // Generate a new session keypair
+    const sessionPrivateKey = this.generatePrivateKey();
+    const sessionAccount = privateKeyToAccount(sessionPrivateKey);
+
+    // Create Biconomy smart account with the session key as signer
+    const smartAccount = await this.buildSmartAccount(sessionAccount.address as Hex);
+
+    const smartAccountAddress = await smartAccount.getAccountAddress();
+
+    // Store in database
+    const dbSmartAccount = await prisma.smartAccount.create({
+      data: {
+        userId,
+        address: smartAccountAddress,
+        deployed: false,
+        ownerAddress: sessionAccount.address, // For recovery
+        sessionKeys: {
+          create: {
+            apiKeyId,
+            publicKey: sessionAccount.address,
+            encryptedPrivateKey: await keyManagementService.encryptSessionKey(
+              sessionPrivateKey
+            ),
+            permissions: this.getDefaultPermissions(),
+            expiresAt: this.getDefaultExpiry(),
+          },
+        },
+      },
+      include: {
+        sessionKeys: true,
+      },
+    });
+
+    return {
+      smartAccountAddress,
+      sessionKey: {
+        publicKey: dbSmartAccount.sessionKeys[0].publicKey,
+        expiresAt: dbSmartAccount.sessionKeys[0].expiresAt,
+      },
+      needsFunding: !dbSmartAccount.deployed,
+    };
+  }
+
+  /**
+   * Create an additional session key for an existing smart account
+   */
+  async createSessionKey(smartAccountId: string, apiKeyId: string) {
+    const smartAccount = await prisma.smartAccount.findUnique({
+      where: { id: smartAccountId },
+    });
+
+    if (!smartAccount) {
+      throw new Error("Smart account not found");
+    }
+
+    // Generate new session keypair
+    const sessionPrivateKey = this.generatePrivateKey();
+    const sessionAccount = privateKeyToAccount(sessionPrivateKey);
+
+    // Store in database
+    const sessionKey = await prisma.sessionKey.create({
+      data: {
+        smartAccountId,
+        apiKeyId,
+        publicKey: sessionAccount.address,
+        encryptedPrivateKey: await keyManagementService.encryptSessionKey(
+          sessionPrivateKey
+        ),
+        permissions: this.getDefaultPermissions(),
+        expiresAt: this.getDefaultExpiry(),
+      },
+    });
+
+    return {
+      smartAccountAddress: smartAccount.address,
+      sessionKey: {
+        publicKey: sessionKey.publicKey,
+        expiresAt: sessionKey.expiresAt,
+      },
+    };
+  }
+
+  /**
+   * Execute escrow deposit via smart account
+   */
+  async executeEscrowDeposit(
+    apiKeyId: string,
+    orderId: string,
+    provider: Hex,
+    amount: string,
+    deadline: number
+  ) {
+    // Get session key
+    const sessionKey = await prisma.sessionKey.findUnique({
+      where: { apiKeyId },
+      include: { smartAccount: true },
+    });
+
+    if (!sessionKey) {
+      throw new Error("Session key not found for API key");
+    }
+
+    // Check expiry
+    if (new Date() > sessionKey.expiresAt) {
+      throw new Error("Session key expired");
+    }
+
+    // Validate permission
+    this.validateOperation(sessionKey.permissions as any, "deposit", parseUSDC(amount));
+
+    // Decrypt session private key
+    const privateKey = await keyManagementService.decryptSessionKey(
+      sessionKey.encryptedPrivateKey
+    );
+
+    // Build smart account with session key
+    const account = privateKeyToAccount(privateKey as Hex);
+    const smartAccount = await this.buildSmartAccount(account.address as Hex);
+
+    // Convert orderId to bytes32
+    const orderIdBytes32 = this.stringToBytes32(orderId);
+
+    // Build transaction calldata
+    const amountBigInt = parseUSDC(amount);
+
+    // Step 1: Approve USDC
+    const approveData = encodeFunctionData({
+      abi: [
+        {
+          name: "approve",
+          type: "function",
+          stateMutability: "nonpayable",
+          inputs: [
+            { name: "spender", type: "address" },
+            { name: "amount", type: "uint256" },
+          ],
+          outputs: [{ name: "", type: "bool" }],
+        },
+      ],
+      functionName: "approve",
+      args: [ESCROW_CONTRACT_ADDRESS, amountBigInt],
+    });
+
+    // Step 2: Deposit to escrow
+    const depositData = encodeFunctionData({
+      abi: HumanLayerEscrowABI,
+      functionName: "deposit",
+      args: [provider, orderIdBytes32, amountBigInt, BigInt(deadline)],
+    });
+
+    // Execute as batched transaction
+    const userOpResponse = await smartAccount.sendTransaction([
+      {
+        to: USDC_ADDRESS,
+        data: approveData,
+        value: 0n,
+      },
+      {
+        to: ESCROW_CONTRACT_ADDRESS,
+        data: depositData,
+        value: 0n,
+      },
+    ]);
+
+    // Wait for transaction
+    const { transactionHash } = await userOpResponse.waitForTxHash();
+    const receipt = await userOpResponse.wait();
+
+    // Update usage
+    await prisma.sessionKey.update({
+      where: { id: sessionKey.id },
+      data: {
+        lastUsedAt: new Date(),
+        usageCount: { increment: 1 },
+      },
+    });
+
+    // Mark account as deployed if this was the first transaction
+    if (!sessionKey.smartAccount.deployed) {
+      await prisma.smartAccount.update({
+        where: { id: sessionKey.smartAccountId },
+        data: {
+          deployed: true,
+          deployedAt: new Date(),
+        },
+      });
+    }
+
+    return {
+      transactionHash,
+      userOpHash: userOpResponse.userOpHash,
+      receipt,
+    };
+  }
+
+  /**
+   * Execute escrow release via smart account
+   */
+  async executeEscrowRelease(apiKeyId: string, escrowId: string) {
+    // Get session key
+    const sessionKey = await prisma.sessionKey.findUnique({
+      where: { apiKeyId },
+      include: { smartAccount: true },
+    });
+
+    if (!sessionKey) {
+      throw new Error("Session key not found for API key");
+    }
+
+    // Check expiry
+    if (new Date() > sessionKey.expiresAt) {
+      throw new Error("Session key expired");
+    }
+
+    // Validate permission
+    this.validateOperation(sessionKey.permissions as any, "release", 0n);
+
+    // Decrypt session private key
+    const privateKey = await keyManagementService.decryptSessionKey(
+      sessionKey.encryptedPrivateKey
+    );
+
+    // Build smart account
+    const account = privateKeyToAccount(privateKey as Hex);
+    const smartAccount = await this.buildSmartAccount(account.address as Hex);
+
+    // Convert escrowId to bytes32
+    const escrowIdBytes32 = this.stringToBytes32(escrowId);
+
+    // Build release transaction
+    const releaseData = encodeFunctionData({
+      abi: HumanLayerEscrowABI,
+      functionName: "release",
+      args: [escrowIdBytes32],
+    });
+
+    // Execute transaction
+    const userOpResponse = await smartAccount.sendTransaction({
+      to: ESCROW_CONTRACT_ADDRESS,
+      data: releaseData,
+      value: 0n,
+    });
+
+    const { transactionHash } = await userOpResponse.waitForTxHash();
+    const receipt = await userOpResponse.wait();
+
+    // Update usage
+    await prisma.sessionKey.update({
+      where: { id: sessionKey.id },
+      data: {
+        lastUsedAt: new Date(),
+        usageCount: { increment: 1 },
+      },
+    });
+
+    return {
+      transactionHash,
+      userOpHash: userOpResponse.userOpHash,
+      receipt,
+    };
+  }
+
+  /**
+   * Get smart account balance
+   */
+  async getBalance(smartAccountAddress: Hex) {
+    const publicClient = createPublicClient({
+      chain,
+      transport: http(process.env.BASE_RPC_URL),
+    });
+
+    // Get USDC balance
+    const usdcBalance = await publicClient.readContract({
+      address: USDC_ADDRESS,
+      abi: [
+        {
+          name: "balanceOf",
+          type: "function",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [{ name: "", type: "uint256" }],
+        },
+      ],
+      functionName: "balanceOf",
+      args: [smartAccountAddress],
+    });
+
+    // Get ETH balance (for gas)
+    const ethBalance = await publicClient.getBalance({
+      address: smartAccountAddress,
+    });
+
+    return {
+      usdc: usdcBalance,
+      eth: ethBalance,
+    };
+  }
+
+  /**
+   * Build a Biconomy smart account client
+   */
+  private async buildSmartAccount(ownerAddress: Hex): Promise<BiconomySmartAccountV2> {
+    const smartAccount = await createSmartAccountClient({
+      signer: ownerAddress as any, // Biconomy will handle signing
+      bundlerUrl: this.bundlerUrl,
+      biconomyPaymasterApiKey: this.paymasterUrl?.split("/").pop(), // Extract API key from URL
+      rpcUrl: process.env.BASE_RPC_URL!,
+    });
+
+    return smartAccount;
+  }
+
+  /**
+   * Validate operation against session key permissions
+   */
+  private validateOperation(
+    permissions: SessionPermission[],
+    operation: "approve" | "deposit" | "release",
+    amount: bigint
+  ) {
+    const relevantPermission = permissions.find((p) => {
+      if (operation === "approve") {
+        return p.target.toLowerCase() === USDC_ADDRESS.toLowerCase();
+      } else {
+        return p.target.toLowerCase() === ESCROW_CONTRACT_ADDRESS.toLowerCase();
+      }
+    });
+
+    if (!relevantPermission) {
+      throw new Error(`No permission for operation: ${operation}`);
+    }
+
+    // Check amount limits
+    if (relevantPermission.rules?.maxAmount && amount > BigInt(relevantPermission.rules.maxAmount)) {
+      throw new Error(
+        `Amount ${amount} exceeds max allowed ${relevantPermission.rules.maxAmount}`
+      );
+    }
+  }
+
+  /**
+   * Get default session key permissions
+   */
+  private getDefaultPermissions(): SessionPermission[] {
+    return [
+      {
+        target: USDC_ADDRESS,
+        functionSelector: "0x095ea7b3", // approve(address,uint256)
+        valueLimit: "0",
+        rules: {
+          maxAmount: parseUSDC("10000").toString(), // Max 10k USDC per approval
+        },
+      },
+      {
+        target: ESCROW_CONTRACT_ADDRESS,
+        functionSelector: "0xd0e30db0", // deposit(address,bytes32,uint256,uint256)
+        valueLimit: "0",
+        rules: {
+          maxAmount: parseUSDC("1000").toString(), // Max 1k USDC per order
+        },
+      },
+      {
+        target: ESCROW_CONTRACT_ADDRESS,
+        functionSelector: "0x3ccfd60b", // release(bytes32)
+        valueLimit: "0",
+      },
+    ];
+  }
+
+  /**
+   * Get default session key expiry (90 days)
+   */
+  private getDefaultExpiry(): Date {
+    const now = new Date();
+    now.setDate(now.getDate() + 90);
+    return now;
+  }
+
+  /**
+   * Generate a random private key
+   */
+  private generatePrivateKey(): Hex {
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    return `0x${Buffer.from(randomBytes).toString("hex")}` as Hex;
+  }
+
+  /**
+   * Convert string to bytes32
+   */
+  private stringToBytes32(str: string): Hex {
+    // If it's already a hex string, return it
+    if (str.startsWith("0x") && str.length === 66) {
+      return str as Hex;
+    }
+
+    // Otherwise, pad with zeros
+    const hex = Buffer.from(str).toString("hex");
+    const padded = hex.padEnd(64, "0");
+    return `0x${padded}` as Hex;
+  }
+}
+
+// Export singleton
+export const smartAccountService = new SmartAccountService();

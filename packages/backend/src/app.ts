@@ -15,6 +15,7 @@ import messagesRoutes from "./modules/messages/messages.routes.js";
 import notificationsRoutes from "./modules/notifications/notifications.routes.js";
 import disputesRoutes from "./modules/disputes/disputes.routes.js";
 import activityRoutes from "./modules/activity/activity.routes.js";
+import smartAccountsRoutes from "./modules/smart-accounts/smart-accounts.routes.js";
 import { errorHandler } from "./lib/middleware/errorHandler.js";
 
 const app = express();
@@ -40,6 +41,7 @@ app.use("/api/v1/messages", messagesRoutes);
 app.use("/api/v1/notifications", notificationsRoutes);
 app.use("/api/v1/disputes", disputesRoutes);
 app.use("/api/v1/activity", activityRoutes);
+app.use("/api/v1/smart-accounts", smartAccountsRoutes);
 
 app.use(errorHandler);
 

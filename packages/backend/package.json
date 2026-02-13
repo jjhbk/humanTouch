@@ -13,6 +13,11 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@biconomy/account": "^4.5.7",
+    "@biconomy/bundler": "^3.1.4",
+    "@biconomy/core-types": "^3.1.4",
+    "@biconomy/modules": "^3.1.4",
+    "@biconomy/paymaster": "^3.1.4",
     "@humanlayer/shared": "workspace:*",
     "@prisma/client": "^6.3.0",
     "bcryptjs": "^2.4.3",
@@ -28,6 +33,7 @@
     "prisma": "^6.3.0",
     "siwe": "^2.3.2",
     "uuid": "^9.0.0",
+    "viem": "^2.45.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {
@@ -42,5 +48,8 @@
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-kms": "^3.987.0"
   }
 }

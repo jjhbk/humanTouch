@@ -13,6 +13,10 @@ declare global {
         role: UserRole;
         authMethod: "email" | "wallet" | "apikey";
       };
+      apiKey?: {
+        id: string;
+        label: string;
+      };
     }
   }
 }
@@ -55,6 +59,12 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         role: apiKey.user.role as UserRole,
         authMethod: "apikey",
       };
+
+      req.apiKey = {
+        id: apiKey.id,
+        label: apiKey.label,
+      };
+
       return next();
     }
 

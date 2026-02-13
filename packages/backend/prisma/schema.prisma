@@ -22,6 +22,7 @@ model User {
   providerProfile   ProviderProfile?
   refreshTokens     RefreshToken[]
   apiKeys           ApiKey[]
+  smartAccount      SmartAccount?
   quotesRequested   Quote[]       @relation("QuoteRequester")
   quotesProvided    Quote[]       @relation("QuoteProvider")
   ordersBought      Order[]       @relation("OrderBuyer")
@@ -65,6 +66,7 @@ model ApiKey {
   permissions String[]
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionKey  SessionKey?
   lastUsedAt  DateTime?
   createdAt   DateTime  @default(now())
 }
@@ -262,4 +264,43 @@ model DisputeComment {
   createdAt  DateTime @default(now())
 
   @@index([disputeId, createdAt])
+}
+
+// Account Abstraction Models
+
+model SmartAccount {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address     String   @unique
+  deployed    Boolean  @default(false)
+  deployedAt  DateTime?
+  ownerAddress String?  // Original EOA owner (for recovery)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessionKeys SessionKey[]
+
+  @@index([address])
+}
+
+model SessionKey {
+  id                  String   @id @default(cuid())
+  smartAccountId      String
+  smartAccount        SmartAccount @relation(fields: [smartAccountId], references: [id], onDelete: Cascade)
+  apiKeyId            String   @unique
+  apiKey              ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  publicKey           String
+  encryptedPrivateKey String   @db.Text
+  permissions         Json     // Array of SessionPermission objects
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  lastUsedAt          DateTime?
+  usageCount          Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([smartAccountId])
+  @@index([expiresAt])
+  @@index([apiKeyId])
 }
